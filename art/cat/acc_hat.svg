@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" width="240" height="200">
+<g id="acc_hat" transform="translate(-22 0) rotate(-6 142 46)">
+  <ellipse cx="142" cy="46" rx="28" ry="7" fill="#2E3A59" stroke="#3A2E2B" stroke-width="3"/>
+  <path d="M127,45 L129,16 Q142,10 155,16 L157,45 Z" fill="#2E3A59" stroke="#3A2E2B" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M128,36 L156,36 L156.5,43 L127.5,43 Z" fill="#F2C35B"/>
+</g>
+</svg>

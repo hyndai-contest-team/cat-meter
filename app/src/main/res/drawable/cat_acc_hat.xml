@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 자동 생성: art/cat/acc_hat.svg → tools/svg2vd.py. 직접 고치지 말고 SVG 를 고친 뒤 다시 생성한다. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp" android:height="200dp"
+    android:viewportWidth="240" android:viewportHeight="200">
+    <group android:name="acc_hat" android:translateX="-22" android:translateY="0" android:rotation="-6" android:pivotX="142" android:pivotY="46">
+        <path android:pathData="M114,46 A28,7 0 1,0 170,46 A28,7 0 1,0 114,46 Z" android:fillColor="#2E3A59" android:strokeColor="#3A2E2B" android:strokeWidth="3" />
+        <path android:pathData="M127,45 L129,16 Q142,10 155,16 L157,45 Z" android:fillColor="#2E3A59" android:strokeColor="#3A2E2B" android:strokeWidth="3" android:strokeLineJoin="round" />
+        <path android:pathData="M128,36 L156,36 L156.5,43 L127.5,43 Z" android:fillColor="#F2C35B" />
+    </group>
+</vector>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" width="240" height="200">
+<g id="acc_ribbon">
+  <path d="M92,56 L76,46 Q72,56 76,66 Z" fill="#F28DB2" stroke="#3A2E2B" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M92,56 L106,44 Q112,54 108,64 Z" fill="#F28DB2" stroke="#3A2E2B" stroke-width="2.5" stroke-linejoin="round"/>
+  <circle cx="92" cy="56" r="5" fill="#D9668F" stroke="#3A2E2B" stroke-width="2.5"/>
+</g>
+</svg>

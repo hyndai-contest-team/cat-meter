@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 자동 생성: art/cat/acc_scarf.svg → tools/svg2vd.py. 직접 고치지 말고 SVG 를 고친 뒤 다시 생성한다. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp" android:height="200dp"
+    android:viewportWidth="240" android:viewportHeight="200">
+    <group android:name="acc_scarf">
+        <path android:pathData="M78,128 Q120,150 162,128 L165,141 Q120,165 75,141 Z" android:fillColor="#E2574C" android:strokeColor="#3A2E2B" android:strokeWidth="3" android:strokeLineJoin="round" />
+        <path android:pathData="M96,138 L98,149 M116,142 L116,153 M136,141 L135,152 M152,136 L150,146" android:fillColor="#000000" android:strokeColor="#F5D6A8" android:strokeWidth="3" android:strokeLineCap="round" />
+        <path android:pathData="M140,146 L148,166 Q141,170 132,166 L132,148 Z" android:fillColor="#E2574C" android:strokeColor="#3A2E2B" android:strokeWidth="3" android:strokeLineJoin="round" />
+        <path android:pathData="M135,165 L134,171 M141,167 L141,173 M147,165 L148,171" android:fillColor="#000000" android:strokeColor="#3A2E2B" android:strokeWidth="2" android:strokeLineCap="round" />
+    </group>
+</vector>
