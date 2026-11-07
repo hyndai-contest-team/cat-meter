@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 자동 생성: art/cat/acc_ribbon.svg → tools/svg2vd.py. 직접 고치지 말고 SVG 를 고친 뒤 다시 생성한다. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp" android:height="200dp"
+    android:viewportWidth="240" android:viewportHeight="200">
+    <group android:name="acc_ribbon">
+        <path android:pathData="M92,56 L76,46 Q72,56 76,66 Z" android:fillColor="#F28DB2" android:strokeColor="#3A2E2B" android:strokeWidth="2.5" android:strokeLineJoin="round" />
+        <path android:pathData="M92,56 L106,44 Q112,54 108,64 Z" android:fillColor="#F28DB2" android:strokeColor="#3A2E2B" android:strokeWidth="2.5" android:strokeLineJoin="round" />
+        <path android:pathData="M87,56 A5,5 0 1,0 97,56 A5,5 0 1,0 87,56 Z" android:fillColor="#D9668F" android:strokeColor="#3A2E2B" android:strokeWidth="2.5" />
+    </group>
+</vector>

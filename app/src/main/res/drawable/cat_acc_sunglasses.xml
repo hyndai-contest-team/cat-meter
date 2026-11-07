@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 자동 생성: art/cat/acc_sunglasses.svg → tools/svg2vd.py. 직접 고치지 말고 SVG 를 고친 뒤 다시 생성한다. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp" android:height="200dp"
+    android:viewportWidth="240" android:viewportHeight="200">
+    <group android:name="acc_sunglasses">
+        <path android:pathData="M90,86 H102 A8,8 0 0,1 110,94 V97 A8,8 0 0,1 102,105 H90 A8,8 0 0,1 82,97 V94 A8,8 0 0,1 90,86 Z" android:fillColor="#1F1E24" android:strokeColor="#3A2E2B" android:strokeWidth="2.5" />
+        <path android:pathData="M138,86 H150 A8,8 0 0,1 158,94 V97 A8,8 0 0,1 150,105 H138 A8,8 0 0,1 130,97 V94 A8,8 0 0,1 138,86 Z" android:fillColor="#1F1E24" android:strokeColor="#3A2E2B" android:strokeWidth="2.5" />
+        <path android:pathData="M110,92 Q120,88 130,92" android:strokeColor="#3A2E2B" android:strokeWidth="3" />
+        <path android:pathData="M87,91 L95,91 M135,91 L143,91" android:fillColor="#000000" android:fillAlpha="0.6" android:strokeColor="#FFFFFF" android:strokeWidth="2.5" android:strokeLineCap="round" android:strokeAlpha="0.6" />
+    </group>
+</vector>
