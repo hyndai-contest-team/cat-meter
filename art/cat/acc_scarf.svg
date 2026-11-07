@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" width="240" height="200">
+<g id="acc_scarf">
+  <path d="M78,128 Q120,150 162,128 L165,141 Q120,165 75,141 Z" fill="#E2574C" stroke="#3A2E2B" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M96,138 L98,149 M116,142 L116,153 M136,141 L135,152 M152,136 L150,146" stroke="#F5D6A8" stroke-width="3" stroke-linecap="round"/>
+  <path d="M140,146 L148,166 Q141,170 132,166 L132,148 Z" fill="#E2574C" stroke="#3A2E2B" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M135,165 L134,171 M141,167 L141,173 M147,165 L148,171" stroke="#3A2E2B" stroke-width="2" stroke-linecap="round"/>
+</g>
+</svg>
