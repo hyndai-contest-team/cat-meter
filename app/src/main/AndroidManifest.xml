@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Pleos Vehicle SDK: 누적 거리(Odometer)·기어(Gear) 조회·구독. 제어 권한은 쓰지 않는다. -->
+    <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
+    <!-- Pleos Vehicle SDK: 전비·연비(EvBattery·Fuel) 조회 → 냥수증의 주유비·충전비 -->
+    <uses-permission android:name="pleos.car.permission.CAR_ENERGY" />
+    <!-- Pleos NaviHelper SDK: 목적지·즐겨찾기(집·회사)·현재 위치 조회. 경로를 바꾸지는 않는다. -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
+
+    <!-- 차속: Pleos SDK 에 API 가 없어 AAOS Car API 사용 (dangerous → 런타임 요청) -->
+    <uses-permission android:name="android.car.permission.CAR_SPEED" />
+
+    <!-- 영수증 이미지 저장 (API 28 만 필요, 29+ 는 MediaStore) -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <uses-feature android:name="android.hardware.type.automotive" android:required="true" />
+
+    <!-- 영수증 공유 대상 앱 확인 (API 30+ 패키지 가시성) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="image/png" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".CatMeterApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.CatMeter">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density|uiMode">
+            <!--
+              주행 중 화면 표시(AAOS Driver Distraction). 주행 중에는 입력 UI를 숨기고 기록·고양이만 보여 준다.
+              DO 선언만으로 심사 통과가 보장되지 않는다 (docs/ideas 6-가 검증 항목).
+            -->
+            <meta-data android:name="distractionOptimized" android:value="true" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>
