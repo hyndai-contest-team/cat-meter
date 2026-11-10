@@ -24,7 +24,7 @@ export const PAYMENT_METHODS = {
 export const SEATS = ['ROW_1_CENTER', 'ROW_1_RIGHT', 'ROW_2_LEFT', 'ROW_2_CENTER', 'ROW_2_RIGHT', 'ROW_3_LEFT', 'ROW_3_CENTER', 'ROW_3_RIGHT'];
 
 export class RideError extends Error {
-  /** @param {'not_found' | 'full' | 'duplicate' | 'invalid_name' | 'forbidden' | 'invalid_method' | 'invalid_charge' | 'not_commuting' | 'invalid_seat' | 'not_alighted' | 'already_charged'} code */
+  /** @param {'not_found' | 'full' | 'duplicate' | 'invalid_name' | 'forbidden' | 'invalid_method' | 'invalid_charge' | 'not_commuting' | 'invalid_seat' | 'not_alighted' | 'already_charged' | 'seat_not_occupied' | 'seat_taken'} code */
   constructor(code, message) {
     super(message);
     this.code = code;
@@ -78,7 +78,8 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
         return existing;
       }
       const t = now();
-      const ride = { code, catName, ownerToken: token(16), openedAt: t, expiresAt: t + RIDE_TTL_MS, passengers: [], chargedTripId: null };
+      // seats: 차량이 알려 준 동승석 상태 [{ seat, occupied }]. 좌석 센서가 없는 차는 null (휴대폰에서 자리를 고르지 않는다)
+      const ride = { code, catName, ownerToken: token(16), openedAt: t, expiresAt: t + RIDE_TTL_MS, passengers: [], chargedTripId: null, seats: null };
       rides.set(code, ride);
       return ride;
     },
@@ -87,11 +88,22 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
       return live(code);
     },
 
+    /** 차량 앱이 좌석 센서로 본 동승석 상태를 알린다. 휴대폰 자리 고르기에서 앉은 자리만 누를 수 있게 한다. */
+    setSeats(code, ownerToken, seats) {
+      const ride = mustRide(code);
+      mustOwner(ride, ownerToken);
+      if (!Array.isArray(seats) || seats.some((s) => !s || !SEATS.includes(s.seat) || typeof s.occupied !== 'boolean')) {
+        throw new RideError('invalid_seat', '좌석 정보가 맞지 않아요.');
+      }
+      ride.seats = seats.map((s) => ({ seat: s.seat, occupied: s.occupied }));
+      return ride;
+    },
+
     /**
      * 승객이 휴대폰에서 이름을 넣을 때 부른다.
      * commuting: 승객이 직접 고른 '출퇴근 길이에요'. seat: 좌석 QR 로 들어왔으면 그 자리 (차량이 벨트·좌석 센서로 감지한 자리)
      */
-    addPassenger(code, rawName, commuting, seat = null) {
+    addPassenger(code, rawName, commuting, seat = null, picked = false) {
       const ride = mustRide(code);
       const name = normalizeName(rawName);
       if (!name) throw new RideError('invalid_name', `이름을 1~${MAX_NAME_LENGTH}자로 넣어 주세요.`);
@@ -102,6 +114,15 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
         throw new RideError('full', `이 차에는 최대 ${MAX_PASSENGERS}명까지 탈 수 있어요.`);
       }
       if (seat != null && !SEATS.includes(seat)) throw new RideError('invalid_seat', '좌석 정보가 맞지 않아요. 차 화면의 QR을 다시 찍어 주세요.');
+      // 휴대폰에서 직접 고른 자리: 사람이 앉아 있고, 아직 아무도 고르지 않은 자리만 된다
+      if (seat != null && picked) {
+        if (ride.seats && !ride.seats.some((s) => s.seat === seat && s.occupied)) {
+          throw new RideError('seat_not_occupied', '그 자리에는 앉은 사람이 없어요. 앉은 자리를 다시 골라 주세요.');
+        }
+        if (ride.passengers.some((p) => p.seat === seat)) {
+          throw new RideError('seat_taken', '이미 다른 분이 고른 자리예요. 앉은 자리를 다시 골라 주세요.');
+        }
+      }
       const passenger = { id: token(8), name, commuting: commuting === true, seat: null, joinedAt: now(), payment: null, charge: null, alightedAt: null };
       ride.passengers.push(passenger);
       seatPassenger(ride, passenger, seat);
