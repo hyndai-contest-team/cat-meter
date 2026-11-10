@@ -16,6 +16,9 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- 탑승 등록 서버(server/)에 이동을 열고 탑승자 이름을 받아 온다 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <uses-feature android:name="android.hardware.type.automotive" android:required="true" />
 
     <!-- 영수증 공유 대상 앱 확인 (API 30+ 패키지 가시성) -->

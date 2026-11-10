@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kr.catmeter.app.CatMeterSession
 import kr.catmeter.app.trip.TripRecord
-import kr.catmeter.app.trip.TripTracker
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -77,7 +76,7 @@ fun ReceiptScreen(session: CatMeterSession, state: CatMeterSession.State, car: C
             if (car.restricted) {
                 Text("주행 중에는 저장·공유할 수 없어요.", color = Palette.warn, fontSize = 15.sp)
             } else {
-                SettlePanel(session, record)
+                SettlePanel(session, record, state.autoPay)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(onClick = { export(share = false) }, modifier = Modifier.weight(1f).height(52.dp)) {
                         Text("이미지 저장", fontSize = 17.sp)
@@ -148,55 +147,49 @@ private fun ReceiptCard(record: TripRecord, layer: GraphicsLayer) {
             color = Palette.paperInk, fontSize = 17.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
         )
         Dashed()
-        record.destinationName?.let { Line("목적지", it) }
-        Line("출발", formatTime(record.startedAtMs))
-        Line("도착", formatTime(record.endedAtMs))
-        Line("함께 달린 거리", "${formatKm(record.distanceKm)} km")
-        Line("함께한 시간", formatDuration(record.durationMs))
-        Line("달린 시간", formatDuration(record.movingMs))
-        Line("쉬어 간 횟수", "${record.stopCount}번")
-        if (record.cat.accessories.isNotEmpty()) {
-            Line("오늘의 소품", record.cat.accessories.joinToString(", ") { it.label })
-        }
+        // 차 화면에서 한눈에 읽히도록 핵심만 크게 보여 준다. 요금 세부 내역은 넣지 않는다.
+        record.destinationName?.let { BigLine("목적지", it) }
+        BigLine("시간", "${formatTime(record.startedAtMs)} → ${formatTime(record.endedAtMs)}")
+        BigLine("거리 · 걸린 시간", "${formatKm(record.distanceKm)} km · ${formatDuration(record.durationMs)}")
         Dashed()
         val bill = record.bill
-        Text("냥수증", color = Palette.paperInk, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-        Line("거리 요금", "${formatNyang(bill.meter.distanceNyang)}냥")
-        Line("시간 요금", "${formatNyang(bill.meter.timeNyang)}냥")
-        Line(bill.energy.kind.label, "${formatNyang(bill.energyNyang)}냥")
-        Text(
-            "${energyBasis(bill)} · ${formatNyang(bill.energy.wonPerUnit)}원/${bill.energy.kind.unit}",
-            color = Palette.paperSub, fontSize = 11.sp, fontFamily = mono, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.End,
-        )
-        Line("합계", "${formatNyang(bill.totalNyang)}냥")
-        bill.perPassenger(record.passengers.size)?.let { Line("동승자 1인당", "${formatNyang(it)}냥") }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Text("합계", color = Palette.paperSub, fontSize = 17.sp, modifier = Modifier.weight(1f))
+            Text("${formatNyang(bill.totalNyang)}", color = Palette.paperInk, fontSize = 34.sp, fontWeight = FontWeight.Bold, fontFamily = mono)
+            Text(" 냥", color = Palette.paperSub, fontSize = 17.sp, modifier = Modifier.padding(bottom = 5.dp))
+        }
+        if (record.joins.isEmpty()) {
+            bill.perPassenger(record.passengers.size)?.let { BigLine("1인당", "${formatNyang(it)}냥") }
+        } else {
+            val amounts = record.shares.values
+            BigLine("나눠 낼 금액", "${formatNyang(amounts.min())}~${formatNyang(amounts.max())}냥")
+        }
         Text(
             when {
-                record.settledAtMs != null -> "${record.commute.window?.label} 함께 타기 · 정산 완료(모의)"
+                record.settledAtMs != null -> "${record.commute.window?.label} 함께 타기 · 자동결제 완료(테스트)"
                 record.commute.eligible -> "${record.commute.window?.label} 함께 타기 · 정산 가능"
                 else -> "결제 없는 냥 기록"
             },
-            color = Palette.paperSub, fontSize = 12.sp, fontFamily = mono,
+            color = Palette.paperSub, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), textAlign = TextAlign.End,
         )
         if (record.passengers.isNotEmpty()) {
             Dashed()
-            Text("함께 탄 집사들", color = Palette.paperSub, fontSize = 13.sp)
-            Text(record.passengers.joinToString("  "), color = Palette.paperInk, fontSize = 17.sp, textAlign = TextAlign.Center)
+            Text("함께 탄 집사들", color = Palette.paperSub, fontSize = 14.sp)
+            Text(
+                record.passengers.joinToString("  ") { if (it in record.joins) "$it(중간)" else it },
+                color = Palette.paperInk, fontSize = 19.sp, textAlign = TextAlign.Center,
+            )
         }
         Dashed()
-        Text(
-            if (record.distanceSource == TripTracker.DistanceSource.ODOMETER) "거리: 계기판 누적 거리 기준" else "거리: 차속으로 추정한 값",
-            color = Palette.paperSub, fontSize = 11.sp, fontFamily = mono,
-        )
         Text("CAT METER · 고양 미터기", color = Palette.paperSub, fontSize = 11.sp, fontFamily = mono)
     }
 }
 
 @Composable
-private fun Line(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Text(label, color = Palette.paperSub, fontSize = 15.sp, modifier = Modifier.weight(1f))
-        Text(value, color = Palette.paperInk, fontSize = 15.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.Monospace)
+private fun BigLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Palette.paperSub, fontSize = 17.sp, modifier = Modifier.weight(1f))
+        Text(value, color = Palette.paperInk, fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 

@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14171C">
+<title>고양 미터기 탑승</title>
+<style>
+  :root {
+    --bg: #14171C; --surface: #1E232B; --surface-high: #2A313B; --line: #2A313B;
+    --text: #F2F4F7; --sub: #9AA4B2; --accent: #F4B860; --on-accent: #2B1D07;
+    --ok: #7FD1A8; --warn: #F2A65A;
+    --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body { min-height: 100dvh; display: flex; justify-content: center; }
+  main {
+    width: 100%; max-width: 440px;
+    padding: max(28px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .badge { font-size: 13px; color: var(--accent); background: rgba(244, 184, 96, .12); padding: 4px 10px; border-radius: 99px; }
+  .test { font-size: 12px; color: var(--warn); border: 1px solid rgba(242, 166, 90, .5); padding: 3px 8px; border-radius: 99px; }
+  h1 { margin: 0; font-size: 26px; line-height: 1.35; word-break: keep-all; }
+  .lead { margin: 6px 0 0; color: var(--sub); font-size: 15px; line-height: 1.5; word-break: keep-all; }
+  .cat { font-size: 56px; line-height: 1; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  form { display: flex; flex-direction: column; gap: 12px; }
+  label { font-size: 14px; color: var(--sub); }
+  input[type=text] {
+    font: inherit; font-size: 18px; color: var(--text); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; width: 100%;
+  }
+  input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .check { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border-radius: 12px; padding: 14px; color: var(--text); font-size: 16px; cursor: pointer; }
+  .check input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+  .check small { display: block; color: var(--sub); font-size: 13px; margin-top: 4px; line-height: 1.45; }
+  button {
+    font: inherit; font-size: 18px; font-weight: 700; border: 0; border-radius: 14px; padding: 16px;
+    background: var(--accent); color: var(--on-accent); cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  .methods { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .methods button { background: var(--surface-high); color: var(--text); font-weight: 600; font-size: 16px; padding: 18px 8px; }
+  .card { background: var(--surface); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .card h2 { margin: 0; font-size: 16px; }
+  .row { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
+  .row span:first-child { color: var(--sub); }
+  .amount { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-size: 14px; padding: 4px 12px; border-radius: 99px; background: rgba(127, 209, 168, .14); color: var(--ok); }
+  .muted { color: var(--sub); font-size: 14px; margin: 0; line-height: 1.5; }
+  .error { color: var(--warn); font-size: 15px; margin: 0; min-height: 1.2em; }
+  .center { text-align: center; align-items: center; }
+  .ok { color: var(--ok); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <span class="badge" id="code">탑승 코드 확인 중</span>
+    <span class="test">테스트 결제 · 실제 출금 없음</span>
+  </div>
+
+  <section id="loading"><p class="muted">탑승 정보를 불러오는 중이에요…</p></section>
+
+  <section id="invalid" hidden>
+    <h1>탑승할 수 없어요</h1>
+    <p class="lead" id="invalid-reason">탑승 코드가 없거나 시간이 지났어요. 차 화면의 QR을 다시 찍어 주세요.</p>
+  </section>
+
+  <!-- 1단계: 이름과 출퇴근 여부 -->
+  <section id="join" hidden>
+    <div class="cat" aria-hidden="true">🐱</div>
+    <div>
+      <h1><span class="cat-name">고양이</span> 차에 타요</h1>
+      <p class="lead">이름을 넣으면 탑승이 끝나요. 내릴 때는 아무것도 안 해도 돼요.</p>
+    </div>
+    <form id="join-form" novalidate>
+      <label for="name">내 이름 (차 화면에 보여요)</label>
+      <input id="name" type="text" autocomplete="nickname" maxlength="10" placeholder="예: 민수" required>
+      <label class="check" for="commuting">
+        <input id="commuting" type="checkbox">
+        <span>지금 출근·퇴근하는 길이에요
+          <small>돈을 나눠 내는 카풀은 평일 출퇴근 때만 할 수 있어요. 아니면 결제 없이 냥만 표시돼요.</small>
+        </span>
+      </label>
+      <p class="error" id="join-error" role="alert"></p>
+      <button id="join-submit" type="submit">탑승하기</button>
+    </form>
+  </section>
+
+  <!-- 2단계: 테스트 결제 수단 등록 (출퇴근 길인 사람만) -->
+  <section id="pay" hidden>
+    <div>
+      <h1>결제 수단을 골라 주세요</h1>
+      <p class="lead">처음 한 번만 등록하면 내릴 때 자동으로 결제돼요. 지금은 <strong>테스트</strong>라서 실제 결제창이 열리지 않고, 카드번호도 받지 않아요.</p>
+    </div>
+    <div class="methods" id="methods">
+      <button type="button" data-method="kakaopay">카카오페이</button>
+      <button type="button" data-method="naverpay">네이버페이</button>
+      <button type="button" data-method="tosspay">토스페이</button>
+      <button type="button" data-method="card">테스트 카드</button>
+    </div>
+    <p class="error" id="pay-error" role="alert"></p>
+  </section>
+
+  <!-- 3단계: 탑승 완료와 결제 결과 -->
+  <section id="done" class="center" hidden>
+    <div class="cat" aria-hidden="true">😺</div>
+    <h1>탑승 완료!</h1>
+    <p class="lead" id="done-lead"></p>
+  </section>
+
+  <section class="card" id="receipt" hidden>
+    <h2 id="receipt-title">결제 정보</h2>
+    <div class="row"><span>결제 수단</span><span id="receipt-method">-</span></div>
+    <div id="receipt-paid" hidden>
+      <div class="amount"><span id="receipt-amount">0</span>원</div>
+      <p class="muted ok">자동결제 완료 (테스트 · 실제 출금 없음)</p>
+    </div>
+    <p class="muted" id="receipt-wait">내리면 운행 요금이 자동으로 결제돼요. 이 화면을 열어 두면 결과가 바로 보여요.</p>
+  </section>
+
+  <section class="card" id="riders" hidden>
+    <h2>지금 탄 사람 <span id="count">0</span>명</h2>
+    <div class="chips" id="chips"></div>
+    <p class="muted" id="empty">아직 아무도 없어요</p>
+  </section>
+</main>
+
+<script>
+  const code = decodeURIComponent(location.pathname.split('/').filter(Boolean)[1] || '').toUpperCase();
+  const $ = (id) => document.getElementById(id);
+  const NAME_KEY = 'catmeter.name';
+  const ME_KEY = `catmeter.ride.${code}`;
+  const api = (path = '') => `/api/rides/${encodeURIComponent(code)}${path}`;
+  let me = null;
+  let pollTimer = null;
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  $('code').textContent = code ? `탑승 코드 ${code.slice(0, 4)}-${code.slice(4)}` : '탑승 코드 없음';
+
+  function show(id) {
+    for (const s of ['loading', 'invalid', 'join', 'pay', 'done']) $(s).hidden = s !== id;
+  }
+
+  function invalid(message) {
+    if (message) $('invalid-reason').textContent = message;
+    show('invalid');
+  }
+
+  function renderRide(ride) {
+    for (const el of document.querySelectorAll('.cat-name')) el.textContent = ride.catName;
+    $('riders').hidden = false;
+    $('count').textContent = ride.passengers.length;
+    $('empty').hidden = ride.passengers.length > 0;
+    $('chips').replaceChildren(...ride.passengers.map((p) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.textContent = p.name;
+      return chip;
+    }));
+  }
+
+  /** 내 탑승 정보에 맞는 단계를 보여 준다 */
+  function renderMe() {
+    if (!me) return show('join');
+    if (me.commuting && !me.payment) return show('pay');
+    show('done');
+    $('done-lead').textContent = me.commuting
+      ? `${me.name}님, 차 화면에 이름이 떴는지 확인해 주세요.`
+      : `${me.name}님, 출퇴근 길이 아니라서 결제 없이 냥만 표시돼요.`;
+    $('receipt').hidden = !me.commuting;
+    $('receipt-method').textContent = me.payment ? me.payment.label : '-';
+    const paid = me.charge && me.charge.status === 'paid';
+    $('receipt-paid').hidden = !paid;
+    $('receipt-wait').hidden = paid;
+    $('receipt-title').textContent = paid ? '결제 영수증' : '결제 정보';
+    if (paid) {
+      $('receipt-amount').textContent = me.charge.amount.toLocaleString('ko-KR');
+      stopPolling();
+    } else if (me.commuting && me.payment) {
+      startPolling();
+    }
+  }
+
+  async function request(path, options) {
+    const res = await fetch(api(path), { cache: 'no-store', ...options });
+    const body = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, body };
+  }
+
+  async function load() {
+    try {
+      const savedId = store.get(ME_KEY);
+      if (savedId) {
+        const mine = await request(`/passengers/${savedId}`);
+        if (mine.ok) {
+          me = mine.body.passenger;
+          renderRide(mine.body.ride);
+          return renderMe();
+        }
+      }
+      const ride = await request();
+      if (!ride.ok) return invalid(ride.body.message);
+      renderRide(ride.body);
+      $('name').value = store.get(NAME_KEY) || '';
+      show('join');
+    } catch {
+      invalid('서버에 연결할 수 없어요. 차와 같은 와이파이에 연결돼 있는지 확인해 주세요.');
+    }
+  }
+
+  /** 결제 결과를 기다린다. 화면이 열려 있는 동안만 확인한다. */
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(async () => {
+      try {
+        const mine = await request(`/passengers/${me.id}`);
+        if (!mine.ok) return stopPolling();
+        me = mine.body.passenger;
+        renderRide(mine.body.ride);
+        renderMe();
+      } catch {}
+    }, 4000);
+  }
+  function stopPolling() {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  $('join-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('name').value.trim();
+    if (!name) { $('join-error').textContent = '이름을 넣어 주세요.'; return; }
+    $('join-submit').disabled = true;
+    $('join-error').textContent = '';
+    try {
+      const res = await request('/passengers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, commuting: $('commuting').checked }),
+      });
+      if (!res.ok) { $('join-error').textContent = res.body.message || '탑승하지 못했어요. 다시 시도해 주세요.'; return; }
+      me = res.body.passenger;
+      store.set(NAME_KEY, me.name);
+      store.set(ME_KEY, me.id);
+      renderRide(res.body.ride);
+      renderMe();
+    } catch {
+      $('join-error').textContent = '서버에 연결할 수 없어요. 잠시 뒤 다시 눌러 주세요.';
+    } finally {
+      $('join-submit').disabled = false;
+    }
+  });
+
+  $('methods').addEventListener('click', async (e) => {
+    const button = e.target.closest('button[data-method]');
+    if (!button || !me) return;
+    for (const b of $('methods').querySelectorAll('button')) b.disabled = true;
+    $('pay-error').textContent = '';
+    try {
+      const res = await request(`/passengers/${me.id}/payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: button.dataset.method }),
+      });
+      if (!res.ok) { $('pay-error').textContent = res.body.message || '등록하지 못했어요. 다시 골라 주세요.'; return; }
+      me = res.body.passenger;
+      renderMe();
+    } catch {
+      $('pay-error').textContent = '서버에 연결할 수 없어요. 잠시 뒤 다시 눌러 주세요.';
+    } finally {
+      for (const b of $('methods').querySelectorAll('button')) b.disabled = false;
+    }
+  });
+
+  if (/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/.test(code)) load();
+  else invalid();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "catmeter-boarding-server",
+  "private": true,
+  "description": "고양 미터기 탑승 등록 서버 (승객이 탑승 QR을 찍으면 열리는 페이지와 API)",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}

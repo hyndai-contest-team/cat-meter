@@ -58,6 +58,36 @@ data class TripBill(
     }
 
     companion object {
+        /**
+         * 사람별 나눠 낼 금액 (운전자 제외). 중간에 탄 사람은 탄 뒤 구간만 낸다.
+         * 탑승 시점마다 구간을 나누고, 각 구간 요금(그 시점까지 누적 요금의 차이)을 그 구간에 타고 있던 사람끼리 똑같이 나눈다.
+         * 아무도 타지 않은 구간의 요금은 운전자 몫이다. 사람별 금액은 10냥 단위로 올린다.
+         * @param joins 중간에 탄 사람의 탑승 지점. 없는 사람은 출발부터 탄 것으로 본다.
+         */
+        fun shares(
+            distanceKm: Float,
+            elapsedMs: Long,
+            energy: EnergyProfile,
+            passengers: List<String>,
+            joins: Map<String, JoinPoint>,
+        ): Map<String, Int> {
+            if (passengers.isEmpty()) return emptyMap()
+            val end = JoinPoint(distanceKm.coerceAtLeast(0f), elapsedMs.coerceAtLeast(0L))
+            fun startOf(name: String): JoinPoint = joins[name]?.let { minOf(it, end) } ?: JoinPoint.START
+            fun costAt(p: JoinPoint): Int = of(p.distanceKm, p.elapsedMs, energy).totalNyang
+
+            val points = (passengers.map(::startOf) + JoinPoint.START + end).distinct().sorted()
+            val owed = passengers.associateWith { 0.0 }.toMutableMap()
+            points.zipWithNext { from, to ->
+                val riders = passengers.filter { startOf(it) <= from }
+                if (riders.isEmpty()) return@zipWithNext
+                val each = (costAt(to) - costAt(from)).coerceAtLeast(0).toDouble() / riders.size
+                riders.forEach { owed[it] = owed.getValue(it) + each }
+            }
+            // 부동소수 오차로 10냥이 한 칸 더 올라가지 않게 아주 작은 값을 빼고 올린다
+            return owed.mapValues { (_, v) -> (ceil(v / 10.0 - 1e-9) * 10).toInt().coerceAtLeast(0) }
+        }
+
         fun of(distanceKm: Float, elapsedMs: Long, energy: EnergyProfile): TripBill {
             val km = distanceKm.coerceAtLeast(0f)
             val energyWon = km / energy.kmPerUnit * energy.wonPerUnit
@@ -67,5 +97,15 @@ data class TripBill(
                 energy = energy,
             )
         }
+    }
+}
+
+/** 중간에 탄 사람의 탑승 지점: 출발 후 거리와 시간 */
+data class JoinPoint(val distanceKm: Float, val elapsedMs: Long) : Comparable<JoinPoint> {
+    override fun compareTo(other: JoinPoint): Int =
+        compareValuesBy(this, other, JoinPoint::elapsedMs, JoinPoint::distanceKm)
+
+    companion object {
+        val START = JoinPoint(0f, 0L)
     }
 }
