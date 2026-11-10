@@ -2,6 +2,7 @@ package kr.catmeter.app.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kr.catmeter.app.trip.SeatPosition
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -27,6 +28,8 @@ class BoardingClient(private val baseUrl: String) {
         val commuting: Boolean,
         /** 등록한 결제 수단 이름. 없으면 null */
         val paymentLabel: String?,
+        /** 좌석 QR 로 탔으면 그 자리 */
+        val seat: SeatPosition? = null,
     )
 
     data class Charge(val name: String, val amount: Int, val status: Status, val methodLabel: String?) {
@@ -49,6 +52,7 @@ class BoardingClient(private val baseUrl: String) {
                 name = p.getString("name"),
                 commuting = p.optBoolean("commuting", false),
                 paymentLabel = p.optString("paymentLabel").takeUnless { p.isNull("paymentLabel") || it.isBlank() },
+                seat = SeatPosition.ofName(p.optString("seat").takeUnless { p.isNull("seat") }),
             )
         }
     }

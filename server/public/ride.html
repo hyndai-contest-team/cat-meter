@@ -56,6 +56,7 @@
   .error { color: var(--warn); font-size: 15px; margin: 0; min-height: 1.2em; }
   .center { text-align: center; align-items: center; }
   .ok { color: var(--ok); }
+  .seat { align-self: flex-start; font-size: 15px; font-weight: 600; color: var(--ok); background: rgba(127, 209, 168, .14); padding: 6px 12px; border-radius: 10px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -80,6 +81,7 @@
       <h1><span class="cat-name">고양이</span> 차에 타요</h1>
       <p class="lead">이름을 넣으면 탑승이 끝나요. 내릴 때는 아무것도 안 해도 돼요.</p>
     </div>
+    <span class="seat" id="join-seat" hidden></span>
     <form id="join-form" novalidate>
       <label for="name">내 이름 (차 화면에 보여요)</label>
       <input id="name" type="text" autocomplete="nickname" maxlength="10" placeholder="예: 민수" required>
@@ -107,6 +109,17 @@
       <button type="button" data-method="card">테스트 카드</button>
     </div>
     <p class="error" id="pay-error" role="alert"></p>
+  </section>
+
+  <!-- 이미 탄 사람이 다른 좌석 QR 을 찍었을 때 -->
+  <section id="move" hidden>
+    <div>
+      <h1>자리를 옮기셨나요?</h1>
+      <p class="lead" id="move-lead"></p>
+    </div>
+    <button id="move-submit" type="button">네, 옮겼어요</button>
+    <button id="move-skip" type="button" style="background: var(--surface-high); color: var(--text)">아니요, 그대로예요</button>
+    <p class="error" id="move-error" role="alert"></p>
   </section>
 
   <!-- 3단계: 탑승 완료와 결제 결과 -->
@@ -139,6 +152,15 @@
   const NAME_KEY = 'catmeter.name';
   const ME_KEY = `catmeter.ride.${code}`;
   const api = (path = '') => `/api/rides/${encodeURIComponent(code)}${path}`;
+  /** 좌석 QR 로 들어왔으면 차량이 감지한 자리 (trip/Seats.kt 와 같은 이름) */
+  const SEAT_LABELS = {
+    ROW_1_CENTER: '앞 가운데', ROW_1_RIGHT: '조수석',
+    ROW_2_LEFT: '뒷좌석 왼쪽', ROW_2_CENTER: '뒷좌석 가운데', ROW_2_RIGHT: '뒷좌석 오른쪽',
+    ROW_3_LEFT: '3열 왼쪽', ROW_3_CENTER: '3열 가운데', ROW_3_RIGHT: '3열 오른쪽',
+  };
+  const seatParam = new URLSearchParams(location.search).get('seat');
+  const seat = Object.hasOwn(SEAT_LABELS, seatParam ?? '') ? seatParam : null;
+  let moveDismissed = false;
   let me = null;
   let pollTimer = null;
 
@@ -150,7 +172,7 @@
   $('code').textContent = code ? `탑승 코드 ${code.slice(0, 4)}-${code.slice(4)}` : '탑승 코드 없음';
 
   function show(id) {
-    for (const s of ['loading', 'invalid', 'join', 'pay', 'done']) $(s).hidden = s !== id;
+    for (const s of ['loading', 'invalid', 'join', 'pay', 'move', 'done']) $(s).hidden = s !== id;
   }
 
   function invalid(message) {
@@ -173,12 +195,21 @@
 
   /** 내 탑승 정보에 맞는 단계를 보여 준다 */
   function renderMe() {
-    if (!me) return show('join');
+    if (!me) {
+      $('join-seat').hidden = !seat;
+      if (seat) $('join-seat').textContent = `📍 ${SEAT_LABELS[seat]}에 앉으셨네요`;
+      return show('join');
+    }
+    if (seat && me.seat !== seat && !moveDismissed) {
+      $('move-lead').textContent = `${me.name}님, ${SEAT_LABELS[seat]}(으)로 옮기셨으면 눌러 주세요. 다시 탈 필요는 없어요.`;
+      return show('move');
+    }
     if (me.commuting && !me.payment) return show('pay');
     show('done');
+    const where = me.seat ? `${SEAT_LABELS[me.seat]} · ` : '';
     $('done-lead').textContent = me.commuting
-      ? `${me.name}님, 차 화면에 이름이 떴는지 확인해 주세요.`
-      : `${me.name}님, 출퇴근 길이 아니라서 결제 없이 냥만 표시돼요.`;
+      ? `${where}${me.name}님, 차 화면에 이름이 떴는지 확인해 주세요.`
+      : `${where}${me.name}님, 출퇴근 길이 아니라서 결제 없이 냥만 표시돼요.`;
     $('receipt').hidden = !me.commuting;
     $('receipt-method').textContent = me.payment ? me.payment.label : '-';
     const paid = me.charge && me.charge.status === 'paid';
@@ -214,7 +245,7 @@
       if (!ride.ok) return invalid(ride.body.message);
       renderRide(ride.body);
       $('name').value = store.get(NAME_KEY) || '';
-      show('join');
+      renderMe();
     } catch {
       invalid('서버에 연결할 수 없어요. 차와 같은 와이파이에 연결돼 있는지 확인해 주세요.');
     }
@@ -248,7 +279,7 @@
       const res = await request('/passengers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, commuting: $('commuting').checked }),
+        body: JSON.stringify({ name, commuting: $('commuting').checked, seat }),
       });
       if (!res.ok) { $('join-error').textContent = res.body.message || '탑승하지 못했어요. 다시 시도해 주세요.'; return; }
       me = res.body.passenger;
@@ -262,6 +293,27 @@
       $('join-submit').disabled = false;
     }
   });
+
+  $('move-submit').addEventListener('click', async () => {
+    $('move-submit').disabled = true;
+    $('move-error').textContent = '';
+    try {
+      const res = await request(`/passengers/${me.id}/seat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seat }),
+      });
+      if (!res.ok) { $('move-error').textContent = res.body.message || '자리를 옮기지 못했어요.'; return; }
+      me = res.body.passenger;
+      renderRide(res.body.ride);
+      renderMe();
+    } catch {
+      $('move-error').textContent = '서버에 연결할 수 없어요. 잠시 뒤 다시 눌러 주세요.';
+    } finally {
+      $('move-submit').disabled = false;
+    }
+  });
+  $('move-skip').addEventListener('click', () => { moveDismissed = true; renderMe(); });
 
   $('methods').addEventListener('click', async (e) => {
     const button = e.target.closest('button[data-method]');

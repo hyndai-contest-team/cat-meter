@@ -8,6 +8,7 @@
 //   GET  /ride/:code                              탑승 등록 페이지
 //   POST /api/rides/:code/passengers              이름·출퇴근 여부를 넣어 탑승 → 내 탑승 번호(id)
 //   POST /api/rides/:code/passengers/:id/payment  테스트 결제 수단 등록
+//   POST /api/rides/:code/passengers/:id/seat     자리 이동 (같은 휴대폰이 다른 좌석 QR 을 찍었을 때)
 //   GET  /api/rides/:code/passengers/:id          내 탑승 정보와 결제 결과
 //
 // 개인정보는 탑승자 이름만 받는다. 카드·계좌·전화번호는 받지 않는다. 결제는 모두 테스트(실제 출금 없음)다.
@@ -23,7 +24,7 @@ const RIDE_PAGE = new URL('../public/ride.html', import.meta.url);
 
 const ERROR_STATUS = {
   not_found: 404, invalid_name: 400, duplicate: 409, full: 409,
-  forbidden: 403, invalid_method: 400, invalid_charge: 400, not_commuting: 409,
+  forbidden: 403, invalid_method: 400, invalid_charge: 400, not_commuting: 409, invalid_seat: 400,
 };
 
 /**
@@ -77,7 +78,7 @@ export function createHandler({ store, publicUrl }) {
         // 승객: 탑승
         if (rest.length === 1 && rest[0] === 'passengers' && req.method === 'POST') {
           const body = await readJson(req);
-          const passenger = store.addPassenger(code, body.name, body.commuting === true);
+          const passenger = store.addPassenger(code, body.name, body.commuting === true, body.seat ?? null);
           return sendJson(res, 201, { passenger: passengerView(passenger), ride: rideView(store.getRide(code)) });
         }
 
@@ -90,6 +91,10 @@ export function createHandler({ store, publicUrl }) {
           if (rest.length === 3 && rest[2] === 'payment' && req.method === 'POST') {
             const body = await readJson(req);
             return sendJson(res, 200, { passenger: passengerView(store.registerPayment(code, id, body.method)) });
+          }
+          if (rest.length === 3 && rest[2] === 'seat' && req.method === 'POST') {
+            const body = await readJson(req);
+            return sendJson(res, 200, { passenger: passengerView(store.moveSeat(code, id, body.seat ?? null)), ride: rideView(store.getRide(code)) });
           }
         }
 
@@ -121,6 +126,7 @@ function rideView(ride) {
       name: p.name,
       joinedAt: p.joinedAt,
       commuting: p.commuting,
+      seat: p.seat ?? null,
       paymentLabel: p.payment?.label ?? null,
       chargeStatus: p.charge?.status ?? null,
     })),
@@ -133,6 +139,7 @@ function passengerView(p) {
     id: p.id,
     name: p.name,
     commuting: p.commuting,
+    seat: p.seat ?? null,
     payment: p.payment ? { method: p.payment.method, label: p.payment.label } : null,
     charge: p.charge,
   };

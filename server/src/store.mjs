@@ -20,8 +20,11 @@ export const PAYMENT_METHODS = {
   card: '테스트카드 ••••1234',
 };
 
+/** 동승석 이름 (차량 앱 trip/Seats.kt 와 같다). 운전석(ROW_1_LEFT)은 뺀다. */
+export const SEATS = ['ROW_1_CENTER', 'ROW_1_RIGHT', 'ROW_2_LEFT', 'ROW_2_CENTER', 'ROW_2_RIGHT', 'ROW_3_LEFT', 'ROW_3_CENTER', 'ROW_3_RIGHT'];
+
 export class RideError extends Error {
-  /** @param {'not_found' | 'full' | 'duplicate' | 'invalid_name' | 'forbidden' | 'invalid_method' | 'invalid_charge' | 'not_commuting'} code */
+  /** @param {'not_found' | 'full' | 'duplicate' | 'invalid_name' | 'forbidden' | 'invalid_method' | 'invalid_charge' | 'not_commuting' | 'invalid_seat'} code */
   constructor(code, message) {
     super(message);
     this.code = code;
@@ -50,6 +53,14 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
     return ride;
   }
 
+  /** 좌석을 정한다. 그 자리에 이미 다른 사람이 있으면 그 사람은 자리를 옮긴 것으로 보고 자리를 비운다. */
+  function seatPassenger(ride, passenger, seat) {
+    if (seat == null) return;
+    if (!SEATS.includes(seat)) throw new RideError('invalid_seat', '좌석 정보가 맞지 않아요. 차 화면의 QR을 다시 찍어 주세요.');
+    for (const other of ride.passengers) if (other !== passenger && other.seat === seat) other.seat = null;
+    passenger.seat = seat;
+  }
+
   function mustOwner(ride, ownerToken) {
     if (!ownerToken || ownerToken !== ride.ownerToken) throw new RideError('forbidden', '이 이동을 연 차량만 할 수 있어요.');
   }
@@ -76,8 +87,11 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
       return live(code);
     },
 
-    /** 승객이 휴대폰에서 이름을 넣을 때 부른다. commuting: 승객이 직접 고른 '출퇴근 길이에요' */
-    addPassenger(code, rawName, commuting) {
+    /**
+     * 승객이 휴대폰에서 이름을 넣을 때 부른다.
+     * commuting: 승객이 직접 고른 '출퇴근 길이에요'. seat: 좌석 QR 로 들어왔으면 그 자리 (차량이 벨트·좌석 센서로 감지한 자리)
+     */
+    addPassenger(code, rawName, commuting, seat = null) {
       const ride = mustRide(code);
       const name = normalizeName(rawName);
       if (!name) throw new RideError('invalid_name', `이름을 1~${MAX_NAME_LENGTH}자로 넣어 주세요.`);
@@ -87,8 +101,19 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
       if (ride.passengers.length >= MAX_PASSENGERS) {
         throw new RideError('full', `이 차에는 최대 ${MAX_PASSENGERS}명까지 탈 수 있어요.`);
       }
-      const passenger = { id: token(8), name, commuting: commuting === true, joinedAt: now(), payment: null, charge: null };
+      if (seat != null && !SEATS.includes(seat)) throw new RideError('invalid_seat', '좌석 정보가 맞지 않아요. 차 화면의 QR을 다시 찍어 주세요.');
+      const passenger = { id: token(8), name, commuting: commuting === true, seat: null, joinedAt: now(), payment: null, charge: null };
       ride.passengers.push(passenger);
+      seatPassenger(ride, passenger, seat);
+      return passenger;
+    },
+
+    /** 이미 탄 승객이 다른 자리 QR 을 찍었을 때: 자리 이동 */
+    moveSeat(code, id, seat) {
+      const ride = mustRide(code);
+      const passenger = this.getPassenger(code, id);
+      if (seat == null) throw new RideError('invalid_seat', '좌석 정보가 맞지 않아요.');
+      seatPassenger(ride, passenger, seat);
       return passenger;
     },
 

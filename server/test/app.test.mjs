@@ -176,6 +176,31 @@ test('자동결제: 금액이 하나라도 틀리면 아무도 결제하지 않�
   });
 });
 
+test('좌석: 좌석 QR 로 타면 자리가 기록되고, 같은 사람이 다른 자리 QR 을 찍으면 자리를 옮긴다', async () => {
+  await withServer(async (call) => {
+    await call('PUT', `/api/rides/${CODE}`, {});
+    const joined = await call('POST', `/api/rides/${CODE}/passengers`, { name: '민수', commuting: true, seat: 'ROW_2_LEFT' });
+    assert.equal(joined.json.passenger.seat, 'ROW_2_LEFT');
+
+    const moved = await call('POST', `/api/rides/${CODE}/passengers/${joined.json.passenger.id}/seat`, { seat: 'ROW_1_RIGHT' });
+    assert.equal(moved.status, 200);
+    assert.deepEqual(moved.json.ride.passengers.map((p) => [p.name, p.seat]), [['민수', 'ROW_1_RIGHT']]);
+  });
+});
+
+test('좌석: 이미 누가 있는 자리에 새 사람이 타면 앞사람은 자리를 비운 것으로 본다. 운전석·틀린 이름은 거절한다', async () => {
+  await withServer(async (call) => {
+    await call('PUT', `/api/rides/${CODE}`, {});
+    await call('POST', `/api/rides/${CODE}/passengers`, { name: '민수', seat: 'ROW_2_LEFT' });
+    await call('POST', `/api/rides/${CODE}/passengers`, { name: '하늘', seat: 'ROW_2_LEFT' });
+    const ride = await call('GET', `/api/rides/${CODE}`);
+    assert.deepEqual(ride.json.passengers.map((p) => [p.name, p.seat]), [['민수', null], ['하늘', 'ROW_2_LEFT']]);
+
+    assert.equal((await call('POST', `/api/rides/${CODE}/passengers`, { name: '운전', seat: 'ROW_1_LEFT' })).status, 400);
+    assert.equal((await call('POST', `/api/rides/${CODE}/passengers`, { name: '틀림', seat: 'TRUNK' })).status, 400);
+  });
+});
+
 test('탑승 등록 페이지와 상태 확인', async () => {
   await withServer(async (call) => {
     const page = await call('GET', `/ride/${CODE}`);

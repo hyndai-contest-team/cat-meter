@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -18,6 +20,7 @@ import kotlinx.coroutines.launch
 import kr.catmeter.app.car.AaosMonitor
 import kr.catmeter.app.car.NaviSource
 import kr.catmeter.app.car.PleosVehicleSource
+import kr.catmeter.app.car.SeatSensor
 import kr.catmeter.app.data.BoardingClient
 import kr.catmeter.app.data.CatMeterStore
 import kr.catmeter.app.trip.Accessory
@@ -29,6 +32,9 @@ import kr.catmeter.app.trip.CommuteWindow
 import kr.catmeter.app.trip.EnergyProfile
 import kr.catmeter.app.trip.GeoPoint
 import kr.catmeter.app.trip.JoinPoint
+import kr.catmeter.app.trip.SeatPosition
+import kr.catmeter.app.trip.SeatPrompts
+import kr.catmeter.app.trip.SeatSignal
 import kr.catmeter.app.trip.Fur
 import kr.catmeter.app.trip.TripRecord
 import kr.catmeter.app.trip.TripTracker
@@ -70,6 +76,10 @@ class CatMeterSession(context: Context) {
         val autoPay: AutoPay = AutoPay.None,
         /** 이동 중에 탄 사람의 탑승 지점 */
         val midJoins: Map<String, JoinPoint> = emptyMap(),
+        /** 동승석별 좌석 점유·안전벨트 신호 */
+        val seats: Map<SeatPosition, SeatSignal> = emptyMap(),
+        /** 새로 앉았지만 아직 탑승 등록하지 않은 자리. 정차 중이면 첫 자리의 탑승 QR 을 자동으로 띄운다. */
+        val seatPrompts: List<SeatPosition> = emptyList(),
     )
 
     sealed interface AutoPay {
@@ -93,6 +103,7 @@ class CatMeterSession(context: Context) {
     val aaos = AaosMonitor(context)
     val pleos = PleosVehicleSource(context, scope)
     val navi = NaviSource(context, scope)
+    val seatSensor = SeatSensor(context, scope, BuildConfig.SEAT_OCCUPANCY_INVERTED)
 
     private val _state = MutableStateFlow(
         State(
@@ -126,6 +137,20 @@ class CatMeterSession(context: Context) {
         pleos.start()
         aaos.start()
         navi.start()
+        seatSensor.start()
+        // 좌석에 새로 앉으면 그 자리 탑승 QR 을 띄울 목록에 넣는다 (도착 화면에서는 띄우지 않는다).
+        // 알림을 등록하는 순간이나 앉는 동안 값이 잠깐 흔들리므로, 값이 [SEAT_SETTLE_MS] 동안 그대로일 때만 본다.
+        scope.launch {
+            @OptIn(FlowPreview::class)
+            seatSensor.signals.debounce(SEAT_SETTLE_MS).collect { after ->
+                _state.update {
+                    it.copy(
+                        seats = after,
+                        seatPrompts = SeatPrompts.update(it.seatPrompts, it.seats, after, it.assignedSeats(), allowNew = it.phase != Phase.ARRIVED),
+                    )
+                }
+            }
+        }
         scope.launch {
             navi.routeEnded.collect { reason ->
                 if (_state.value.phase != Phase.DRIVING) return@collect
@@ -228,7 +253,10 @@ class CatMeterSession(context: Context) {
                 try {
                     val riders = boardingClient.riders(code)
                     riders.forEach { r -> if (boardedNames.add(r.name)) addPassenger(r.name) }
-                    _state.update { it.copy(riders = riders) }
+                    _state.update {
+                        val assigned = riders.mapNotNull(BoardingClient.Rider::seat).toSet()
+                        it.copy(riders = riders, seatPrompts = it.seatPrompts.filterNot { seat -> seat in assigned })
+                    }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     Log.w(TAG, "boarding poll failed: ${e.message}")
@@ -237,6 +265,11 @@ class CatMeterSession(context: Context) {
             }
         }
     }
+
+    /** 운전자가 좌석 탑승 QR 에서 '나중에'를 눌렀을 때. 그 자리가 비었다가 다시 앉을 때까지 다시 띄우지 않는다. */
+    fun dismissSeatPrompt(seat: SeatPosition) = _state.update { it.copy(seatPrompts = it.seatPrompts - seat) }
+
+    private fun State.assignedSeats(): Set<SeatPosition> = riders.mapNotNull(BoardingClient.Rider::seat).toSet()
 
     /** 탑승 QR 화면을 닫을 때 부른다. 서버의 탑승 정보는 남아 있어서 다시 열면 이어서 받는다. */
     fun closeBoarding() {
@@ -397,6 +430,8 @@ class CatMeterSession(context: Context) {
         private const val AUTO_FINISH_GRACE_MS = 3_000L
         /** 내비 안내 중 이만큼 계속 움직이면 자동 시작 */
         const val AUTO_START_MS = 3_000L
+        /** 좌석 신호가 이만큼 그대로일 때만 앉음·비움으로 본다 */
+        private const val SEAT_SETTLE_MS = 1_500L
         /** 탑승 QR 화면이 떠 있는 동안 탑승자 목록을 확인하는 간격 */
         private const val BOARDING_POLL_MS = 2_000L
     }
