@@ -46,11 +46,15 @@ data class TripRecord(
     val from: GeoPoint? = null,
     val to: GeoPoint? = null,
     val commute: CommuteCheck = CommuteCheck(false, null, emptyList()),
-    /** 모의 결제를 마친 시각 */
+    /** 자동결제(테스트)를 마친 시각 */
     val settledAtMs: Long? = null,
+    /** 중간에 탄 사람의 탑승 지점. 없는 사람은 출발부터 탔다. */
+    val joins: Map<String, JoinPoint> = emptyMap(),
 ) {
     val durationMs: Long get() = (endedAtMs - startedAtMs).coerceAtLeast(0L)
     val bill: TripBill get() = TripBill.of(distanceKm, durationMs, energy)
+    /** 사람별 나눠 낼 금액. 중간에 탄 사람은 탄 뒤 구간만 낸다. */
+    val shares: Map<String, Int> get() = TripBill.shares(distanceKm, durationMs, energy, passengers, joins)
 }
 
 /**

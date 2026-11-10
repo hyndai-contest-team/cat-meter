@@ -15,6 +15,11 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0-mvp"
+
+        // 탑승 등록 서버 (server/). 에뮬레이터에서 10.0.2.2 는 이 컴퓨터를 가리킨다.
+        // 다른 주소를 쓰려면: ./gradlew installDebug -PboardingServerUrl=https://...
+        val boardingServerUrl = (project.findProperty("boardingServerUrl") as String?) ?: "http://10.0.2.2:8787"
+        buildConfigField("String", "BOARDING_SERVER_URL", "\"$boardingServerUrl\"")
     }
 
     buildTypes {
@@ -28,6 +33,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

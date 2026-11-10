@@ -14,7 +14,7 @@
 | 다. 도착 후 영수증 | 고양 영수증 화면, 이미지 저장(갤러리), 공유 시트 |
 | 라. 고양이와 동승자 설정 | 이름·털 색 4종·소품 4종(모자·선글라스·리본·목도리), 동승자 이름(최대 7명) — 기기에 저장 |
 
-**넣지 않은 것**: 냥풀(구간별 분할), 실제 결제·송금, 좌석 점유·구간별 비용 분담·정산 QR, 결제·송금, 조향각·공조·와이퍼 반응, Gleo 음성, 서버 연동.
+**넣지 않은 것**: 냥풀(구간별 분할), 실제 결제·송금(자동결제는 테스트만), 좌석 점유·구간별 비용 분담·정산 QR, 결제·송금, 조향각·공조·와이퍼 반응, Gleo 음성, 서버 연동.
 
 ### 합의 전 항목은 선택지로 두었습니다
 - **주행 중 고양이 표현 (5-나)**: 2026-11-06 결정으로 달리기 모션을 뺐습니다. 고양이는 식빵 자세 정지 그림만 있고,
@@ -55,11 +55,96 @@
 
 ## 실행
 
+### 한 번에 실행 (에뮬레이터 + Virtual Console)
+
+```bash
+./scripts/run-emulator.sh            # 에뮬레이터 켜기 → 부팅 대기 → Virtual Console 브라우저로 열기
+./scripts/run-emulator.sh --install  # 위에 더해 앱 빌드·설치까지
+```
+
+스크립트가 하는 일:
+1. AVD `Pleos_Connect_v2.1.0`을 **Cold boot**(`-no-snapshot-load`)로 켭니다. Quick boot로 켜면 VHAL을 쓸 수 없습니다. 이미 켜진 에뮬레이터가 있으면 그것을 씁니다.
+2. 부팅이 끝날 때까지 기다립니다 (`sys.boot_completed`, 최대 5분).
+3. `--install`을 주면 Android Studio 내장 JBR로 `./gradlew installDebug`를 실행합니다.
+4. `adb forward tcp:8088 tcp:8088`으로 포트를 연결하고, 응답이 오면 `http://127.0.0.1:8088/`(Virtual Console)을 기본 브라우저로 엽니다.
+
+바꿀 수 있는 값: `AVD_NAME`(에뮬레이터 이름), `ANDROID_HOME`(SDK 경로, 기본 `~/Library/Android/sdk`), `JAVA_HOME`.
+예: `AVD_NAME=Pleos_Chabak_Test ./scripts/run-emulator.sh`. 에뮬레이터 로그는 `$TMPDIR/catmeter-emulator.log`에 남습니다.
+
+같은 일을 손으로 할 때:
+
+```bash
+~/Library/Android/sdk/emulator/emulator -avd Pleos_Connect_v2.1.0 -no-snapshot-load &   # 에뮬레이터 (Cold boot)
+adb wait-for-device                                                                       # 부팅 기다리기
+adb forward tcp:8088 tcp:8088                                                             # Virtual Console 포트 연결
+open http://127.0.0.1:8088/                                                               # Virtual Console 열기
+```
+
+Virtual Console이 열리지 않으면 `adb devices`로 에뮬레이터가 보이는지 확인하고, `adb forward tcp:8088 tcp:8088`을 다시 실행합니다.
+PC에서 8088 포트를 다른 프로그램이 쓰고 있지 않은지도 확인합니다. (근거: Pleos 문서 [Virtual Console Setup Guide](https://document.pleos.ai/en/docs/connect/guide/getting-started/application-development/use-vehicle-emulator), [Configuring Emulator](https://document.pleos.ai/en/docs/connect/guide/getting-started/application-development/configure-pleos-connect-emulator))
+
+### 탑승 등록 서버 (탑승 QR)
+
+출발 전 화면의 **탑승 QR 띄우기**를 누르면, 앱이 이 서버에 이번 이동을 열고 휴대폰용 주소를 QR로 보여 줍니다.
+승객이 휴대폰으로 찍어 이름을 넣으면, 2초 간격으로 확인해 동승자 목록에 넣습니다. 외부 라이브러리 없이 Node.js 20 이상만 있으면 됩니다.
+
+**자동결제 (테스트 · 실제 출금 없음)**
+1. 승객은 탑승 페이지에서 이름을 넣고 **"지금 출근·퇴근하는 길이에요"**를 고릅니다. 고르지 않으면 결제 없이 냥만 표시됩니다.
+2. 출퇴근 길이면 결제 수단(카카오페이·네이버페이·토스페이·테스트 카드)을 한 번 고릅니다. 실제 결제창은 열리지 않고 카드번호도 받지 않습니다. 서버는 `mock_`으로 시작하는 가짜 빌링키만 저장합니다.
+3. 차량 탑승 QR 화면에 사람별 상태가 보입니다 (`하늘 · 카카오페이`, `바다 · 결제 미등록`, `별 · 출퇴근 아님`, `민수 · 직접 입력`).
+4. 도착하면, 출퇴근 함께 타기로 판정된 이동이면 앱이 서버에 1인당 금액으로 자동결제를 요청합니다. 도착 화면에 사람별 결과가 나오고, 열려 있는 휴대폰 페이지에는 영수증이 뜹니다.
+   결제하지 못한 사람(결제 수단 미등록, 출퇴근 아님, QR로 타지 않음)은 이유를 보여 줍니다. 같은 이동은 두 번 결제하지 않습니다.
+5. 결제 요청은 이동을 연 차량만 할 수 있습니다 (서버가 처음 이동을 열 때 준 차량 토큰 필요).
+6. **중간 탑승:** 이동 중 차가 서 있을 때(주행 제한이 풀렸을 때) 이동 화면에 **중간 탑승 QR** 버튼이 보입니다. 같은 탑승 코드로 열리고, 차가 움직이면 QR 화면은 바로 닫힙니다.
+   중간에 탄 사람은 탄 지점(거리·시간)을 기록해 **탄 뒤 구간만** 나눠 냅니다. 탑승 시점마다 구간을 나누고, 각 구간 요금을 그 구간에 타고 있던 사람끼리 나눕니다.
+   아무도 타지 않은 구간은 운전자 몫이고, 사람별 금액은 10냥 단위로 올립니다. (`TripBill.shares`)
+
+**시연용 출퇴근 판정 (debug 빌드만)**: 자동결제는 평일 출퇴근 시간대에 집↔회사를 이동한 운행에서만 켜집니다. 다른 시간에 시연하려면 아래 명령으로 판정을 켭니다. 앱을 다시 시작하면 꺼집니다.
+
+```bash
+adb shell am broadcast --user current -a kr.catmeter.app.DEBUG_ROUTE -n kr.catmeter.app/.DebugRouteReceiver --ez demoCommute true
+```
+
+```bash
+cd server
+npm start   # 또는 node src/server.mjs
+npm test    # 서버 테스트
+```
+
+- 서버는 `8787` 포트로 뜨고, 시작할 때 휴대폰이 열 주소(이 컴퓨터의 와이파이 IP)를 출력합니다. **휴대폰과 컴퓨터가 같은 와이파이**에 있어야 합니다.
+- 에뮬레이터 앱은 `http://10.0.2.2:8787`로 접속합니다. 다른 서버를 쓰려면 `./gradlew installDebug -PboardingServerUrl=https://...`로 빌드합니다.
+- 환경 변수: `PORT`(기본 8787), `PUBLIC_URL`(휴대폰이 열 주소. 비우면 와이파이 IP로 만듭니다).
+- 탑승 정보는 서버 메모리에만 두고, 3시간이 지나면 지웁니다. 서버를 끄면 사라집니다. 받는 개인정보는 탑승자 이름뿐입니다.
+- debug 빌드만 `10.0.2.2`·`localhost`로 http 통신을 허용합니다 (`app/src/debug/res/xml/network_security_config.xml`). 실차·release는 https 서버가 필요합니다.
+- 서버에 연결하지 못하면 QR 대신 "탑승 서버에 연결할 수 없어요"와 **다시 연결** 버튼을 보여 주고, 이름은 직접 넣을 수 있습니다.
+
+| 주소 | 누가 | 하는 일 |
+|---|---|---|
+| `PUT /api/rides/:code` | 차량 앱 | 이동을 열고 휴대폰용 주소(`joinUrl`)와 차량 토큰을 받음 |
+| `GET /api/rides/:code` | 차량 앱 | 탑승자 이름 목록 |
+| `GET /ride/:code` | 승객 휴대폰 | 탑승 등록 페이지 |
+| `POST /api/rides/:code/passengers` | 승객 휴대폰 | 이름·출퇴근 여부를 넣어 탑승 (최대 7명, 이름 1~10자, 같은 이름 불가) → 내 탑승 번호 |
+| `POST /api/rides/:code/passengers/:id/payment` | 승객 휴대폰 | 테스트 결제 수단 등록 (출퇴근 길인 사람만) |
+| `GET /api/rides/:code/passengers/:id` | 승객 휴대폰 | 내 탑승 정보와 결제 결과 |
+| `POST /api/rides/:code/charges` | 차량 앱 | 도착 후 자동결제 (테스트). `Authorization: Bearer <차량 토큰>` 필요 |
+
+### Android Studio로 실행
+
 1. Android Studio로 이 저장소를 엽니다. JDK는 Android Studio에 내장된 JBR을 씁니다.
-2. **Pleos Connect 에뮬레이터**(system-image `android-34/pleos_car_emulator`)를 실행합니다.
+2. **Pleos Connect 에뮬레이터**(system-image `android-34/pleos_car_emulator`)를 실행합니다. AVD 설정에서 Boot option을 **Cold boot**로 둡니다.
 3. `./gradlew installDebug`를 실행합니다. 터미널에서 빌드하려면 `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`을 지정합니다.
-4. 주행 값(속도·기어·누적 거리)은 **Pleos Connect Virtual Console**에서 넣습니다. 이 에뮬레이터는 user 빌드라 `adb shell cmd car_service inject-vhal-event`를 쓸 수 없습니다.
+4. 주행 값(기어·누적 거리·좌석 점유 등)은 **Pleos Connect Virtual Console**(위 스크립트, 또는 `adb forward tcp:8088 tcp:8088` 후 `http://127.0.0.1:8088/`)에서 넣습니다. 이 에뮬레이터는 user 빌드라 `adb shell cmd car_service inject-vhal-event`를 쓸 수 없습니다.
 5. 분할 화면은 화면 오른쪽 끝의 `⋮` 핸들을 왼쪽으로 끌어서 엽니다.
+
+### Virtual Console에서 넣을 수 있는 값 (Pleos 문서 기준)
+
+| 영역 | 카드 | 이 앱에서 쓰는 곳 |
+|---|---|---|
+| Motion | Gear Selection (P·R·N·D), Odometer (0 ~ 1,000,000 km) | 도착 확인(P단), 누적 거리 |
+| Convenience | Seat Occupancy (운전석·조수석·뒷좌석 좌우, Empty / Occupied) | 좌석 점유 (탑승 확인에 연결 예정) |
+| Safety | Telltales (안전벨트 경고등 등 Off / On / Blink) | 안전벨트 **착용 여부가 아니라 경고등**만 바꿀 수 있습니다 |
+
+차속을 넣는 카드는 문서 표에 없습니다. 차속을 어떻게 바꾸는지는 Virtual Console을 열어 확인해야 합니다.
 
 단위 테스트: `./gradlew testDebugUnitTest`
 
@@ -78,6 +163,11 @@ app/src/main/java/kr/catmeter/app/
 art/cat/                    고양이 일러스트 원본 SVG (README 참고)
 tools/svg2vd.py             SVG → Android 벡터 이미지 변환
   ui/SetupScreen.kt         출발 전 설정
+  ui/BoardingQrScreen.kt    탑승 QR 화면 (서버 연결 상태·탑승자 목록)
+  trip/Boarding.kt          탑승 코드 만들기
+  data/BoardingClient.kt    탑승 등록 서버와 통신
+server/                     탑승 등록 서버 (src/app.mjs 요청 처리, src/store.mjs 저장소, public/ride.html 휴대폰 페이지)
+scripts/run-emulator.sh     에뮬레이터 + Virtual Console 한 번에 실행
   ui/DriveScreen.kt         이동 중 (좁은 창·넓은 창 레이아웃)
   ui/ReceiptScreen.kt       고양 영수증 + 이미지 캡처
   ui/ReceiptExporter.kt     갤러리 저장(MediaStore) · 공유(FileProvider)
