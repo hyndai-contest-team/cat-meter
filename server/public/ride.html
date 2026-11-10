@@ -89,6 +89,7 @@
       <p class="lead">차가 사람이 앉은 것을 감지한 자리만 누를 수 있어요.</p>
     </div>
     <div class="seatmap" id="seatmap"></div>
+    <p class="muted" id="pick-none-note" hidden></p>
     <p class="error" id="pick-error" role="alert"></p>
     <button class="linkbtn" id="pick-none" type="button">목록에 내 자리가 없어요</button>
   </section>
@@ -234,8 +235,9 @@
     return (latestRide?.seats ?? []).filter((s) => s.occupied && !s.takenBy);
   }
 
+  /** 차가 좌석 상태를 알려 줬으면 자리부터 고른다. 고를 자리가 없어도 배치도와 안내를 보여 준다. */
   function needsPick() {
-    return !me && !seatFromQr && !pickedSeat && !skipPick && freeSeats().length > 0;
+    return !me && !seatFromQr && !pickedSeat && !skipPick && Array.isArray(latestRide?.seats) && latestRide.seats.length > 0;
   }
 
   /** 차 좌석 배치도. 운전석은 1열 왼쪽 (한국 차 기준) */
@@ -276,6 +278,16 @@
       children.push(el);
     });
     $('seatmap').replaceChildren(...children);
+
+    // 고를 자리가 없으면: 모두 등록됐거나, 차가 내 자리를 감지하지 못한 경우다
+    const none = freeSeats().length === 0;
+    const anyOccupied = (latestRide?.seats ?? []).some((s) => s.occupied);
+    $('pick-none-note').hidden = !none;
+    $('pick-none-note').textContent = anyOccupied
+      ? '앉은 자리가 모두 등록됐어요. 차가 감지하지 못한 자리에 앉으셨다면 아래 버튼을 눌러 주세요.'
+      : '차가 아직 앉은 사람을 감지하지 못했어요. 안전벨트를 매면 다시 확인해요. 바로 타려면 아래 버튼을 눌러 주세요.';
+    $('pick-none').className = none ? '' : 'linkbtn';
+    $('pick-none').textContent = none ? '내 자리 없이 탈게요' : '목록에 내 자리가 없어요';
   }
 
   function pickSeat(id) {
