@@ -28,6 +28,7 @@ import kr.catmeter.app.trip.CommuteRule
 import kr.catmeter.app.trip.CommuteWindow
 import kr.catmeter.app.trip.EnergyProfile
 import kr.catmeter.app.trip.GeoPoint
+import kr.catmeter.app.trip.JoinPoint
 import kr.catmeter.app.trip.Fur
 import kr.catmeter.app.trip.TripRecord
 import kr.catmeter.app.trip.TripTracker
@@ -67,6 +68,8 @@ class CatMeterSession(context: Context) {
         val riders: List<BoardingClient.Rider> = emptyList(),
         /** 도착 후 자동결제 (테스트) 상태 */
         val autoPay: AutoPay = AutoPay.None,
+        /** 이동 중에 탄 사람의 탑승 지점 */
+        val midJoins: Map<String, JoinPoint> = emptyMap(),
     )
 
     sealed interface AutoPay {
@@ -187,12 +190,17 @@ class CatMeterSession(context: Context) {
     fun addPassenger(name: String) {
         val n = name.trim().take(10)
         if (n.isEmpty() || n in _state.value.passengers || _state.value.passengers.size >= MAX_PASSENGERS) return
-        _state.update { it.copy(passengers = it.passengers + n) }
+        // 이동 중에 탄 사람은 탄 지점을 기록해 그 뒤 구간만 나눠 내게 한다
+        val join = tracker?.takeIf { _state.value.phase == Phase.DRIVING }?.snapshot(now())
+            ?.let { JoinPoint(it.distanceKm, it.elapsedMs) }
+        _state.update {
+            it.copy(passengers = it.passengers + n, midJoins = if (join != null) it.midJoins + (n to join) else it.midJoins)
+        }
         store.savePassengers(_state.value.passengers)
     }
 
     fun removePassenger(name: String) {
-        _state.update { it.copy(passengers = it.passengers - name) }
+        _state.update { it.copy(passengers = it.passengers - name, midJoins = it.midJoins - name) }
         store.savePassengers(_state.value.passengers)
     }
 
@@ -263,7 +271,7 @@ class CatMeterSession(context: Context) {
         navi.refreshLocation()
         _state.update {
             it.copy(
-                phase = Phase.DRIVING, live = t.snapshot(now()), record = null, arrivalSuggested = false,
+                phase = Phase.DRIVING, live = t.snapshot(now()), record = null, arrivalSuggested = false, midJoins = emptyMap(),
                 destinationName = navi.destination.value?.name,
                 autoStarted = auto,
             )
@@ -307,6 +315,7 @@ class CatMeterSession(context: Context) {
             distanceSource = s.distanceSource,
             cat = st.cat,
             passengers = st.passengers,
+            joins = st.midJoins.filterKeys { it in st.passengers },
             rideNumber = st.pastRides + 1,
             energy = st.energy,
             destinationName = st.destinationName ?: navi.destination.value?.name,
@@ -342,8 +351,8 @@ class CatMeterSession(context: Context) {
     fun chargeRiders() {
         val r = _state.value.record ?: return
         val token = boardingToken
-        val perPerson = r.bill.perPassenger(r.passengers.size)
-        if (!r.commute.eligible || token == null || perPerson == null || _state.value.riders.isEmpty()) {
+        val shares = r.shares
+        if (!r.commute.eligible || token == null || shares.isEmpty() || _state.value.riders.isEmpty()) {
             _state.update { it.copy(autoPay = AutoPay.None) }
             return
         }
@@ -352,7 +361,7 @@ class CatMeterSession(context: Context) {
         _state.update { it.copy(autoPay = AutoPay.Charging) }
         scope.launch {
             try {
-                val charges = boardingClient.charge(code, token, r.id.toString(), r.passengers.associateWith { perPerson })
+                val charges = boardingClient.charge(code, token, r.id.toString(), shares)
                 val paidAny = charges.any { it.status == BoardingClient.Charge.Status.PAID }
                 val settled = if (paidAny && r.settledAtMs == null) r.copy(settledAtMs = now()).also(store::updateTrip) else r
                 _state.update { if (it.record?.id == r.id) it.copy(record = settled, autoPay = AutoPay.Done(charges)) else it }
@@ -372,7 +381,7 @@ class CatMeterSession(context: Context) {
         _state.update {
             it.copy(
                 phase = Phase.SETUP, record = null, destinationName = null,
-                boardingCode = Boarding.newCode(), riders = emptyList(), autoPay = AutoPay.None,
+                boardingCode = Boarding.newCode(), riders = emptyList(), autoPay = AutoPay.None, midJoins = emptyMap(),
             )
         }
     }

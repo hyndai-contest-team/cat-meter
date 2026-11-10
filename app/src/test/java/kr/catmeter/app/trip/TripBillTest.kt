@@ -26,6 +26,41 @@ class TripBillTest {
         assertNull(b.perPassenger(0))
     }
 
+    // 24km, 30분 = 6,100냥. 12km·15분 지점까지 누적 요금 = 1,200 + 150 + 1,700 = 3,050냥
+    private val half = JoinPoint(12f, 15 * 60_000L)
+
+    @Test
+    fun `shares without mid joins equal per passenger`() {
+        val s = TripBill.shares(24f, 30 * 60_000L, fuel, listOf("A", "B", "C"), emptyMap())
+        assertEquals(mapOf("A" to 2_040, "B" to 2_040, "C" to 2_040), s)
+    }
+
+    @Test
+    fun `mid join pays only the segment after boarding`() {
+        // 앞 구간 3,050 → A·B 가 1,525씩, 뒤 구간 3,050 → A·B·C 가 1,016.7씩
+        val s = TripBill.shares(24f, 30 * 60_000L, fuel, listOf("A", "B", "C"), mapOf("C" to half))
+        assertEquals(2_550, s["A"])   // 2,541.7 → 2,550
+        assertEquals(2_550, s["B"])
+        assertEquals(1_020, s["C"])   // 1,016.7 → 1,020
+    }
+
+    @Test
+    fun `segment with nobody on board is the driver's`() {
+        // 앞 구간에는 동승자가 없어 운전자 몫, C 는 뒤 구간 3,050 만 낸다
+        val s = TripBill.shares(24f, 30 * 60_000L, fuel, listOf("C"), mapOf("C" to half))
+        assertEquals(mapOf("C" to 3_050), s)
+    }
+
+    @Test
+    fun `boarding at the very end costs nothing and join after end is clamped`() {
+        val end = JoinPoint(24f, 30 * 60_000L)
+        val s = TripBill.shares(24f, 30 * 60_000L, fuel, listOf("A", "Z"), mapOf("Z" to JoinPoint(30f, 40 * 60_000L)))
+        assertEquals(0, s["Z"])
+        assertEquals(6_100, s["A"])
+        assertEquals(0, TripBill.shares(24f, 30 * 60_000L, fuel, listOf("Z"), mapOf("Z" to end))["Z"])
+        assertEquals(emptyMap<String, Int>(), TripBill.shares(24f, 30 * 60_000L, fuel, emptyList(), emptyMap()))
+    }
+
     @Test
     fun `vehicle efficiency outside plausible range falls back`() {
         assertNull(EnergyProfile.fromVehicle(EnergyKind.EV, 160f))   // Wh/km 같은 다른 단위

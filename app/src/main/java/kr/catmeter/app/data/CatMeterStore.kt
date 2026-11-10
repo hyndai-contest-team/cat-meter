@@ -8,6 +8,7 @@ import kr.catmeter.app.trip.CommuteWindow
 import kr.catmeter.app.trip.EnergyKind
 import kr.catmeter.app.trip.EnergyProfile
 import kr.catmeter.app.trip.GeoPoint
+import kr.catmeter.app.trip.JoinPoint
 import kr.catmeter.app.trip.Fur
 import kr.catmeter.app.trip.TripRecord
 import kr.catmeter.app.trip.TripTracker
@@ -86,6 +87,9 @@ class CatMeterStore(context: Context) {
             .put("window", t.commute.window?.name)
             .put("reasons", JSONArray(t.commute.reasons)))
         .put("settledAt", t.settledAtMs)
+        .put("joins", JSONObject().apply {
+            t.joins.forEach { (name, p) -> put(name, JSONObject().put("km", p.distanceKm.toDouble()).put("ms", p.elapsedMs)) }
+        })
 
     private fun tripFrom(o: JSONObject) = TripRecord(
         id = o.getLong("id"),
@@ -121,6 +125,11 @@ class CatMeterStore(context: Context) {
             )
         } ?: CommuteCheck(false, null, emptyList()),
         settledAtMs = if (o.has("settledAt") && !o.isNull("settledAt")) o.getLong("settledAt") else null,
+        joins = o.optJSONObject("joins")?.let { j ->
+            j.keys().asSequence().mapNotNull { name ->
+                j.optJSONObject(name)?.let { p -> name to JoinPoint(p.optDouble("km").toFloat(), p.optLong("ms")) }
+            }.toMap()
+        } ?: emptyMap(),
     )
 
     private fun pointJson(p: GeoPoint) = JSONObject().put("lat", p.lat).put("lon", p.lon)
