@@ -20,8 +20,11 @@ export const PAYMENT_METHODS = {
   card: '테스트카드 ••••1234',
 };
 
+/** 동승석 이름 (차량 앱 trip/Seats.kt 와 같다). 운전석(ROW_1_LEFT)은 뺀다. */
+export const SEATS = ['ROW_1_CENTER', 'ROW_1_RIGHT', 'ROW_2_LEFT', 'ROW_2_CENTER', 'ROW_2_RIGHT', 'ROW_3_LEFT', 'ROW_3_CENTER', 'ROW_3_RIGHT'];
+
 export class RideError extends Error {
-  /** @param {'not_found' | 'full' | 'duplicate' | 'invalid_name' | 'forbidden' | 'invalid_method' | 'invalid_charge' | 'not_commuting'} code */
+  /** @param {'not_found' | 'full' | 'duplicate' | 'invalid_name' | 'forbidden' | 'invalid_method' | 'invalid_charge' | 'not_commuting' | 'invalid_seat' | 'not_alighted' | 'already_charged' | 'seat_not_occupied' | 'seat_taken'} code */
   constructor(code, message) {
     super(message);
     this.code = code;
@@ -50,6 +53,14 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
     return ride;
   }
 
+  /** 좌석을 정한다. 그 자리에 이미 다른 사람이 있으면 그 사람은 자리를 옮긴 것으로 보고 자리를 비운다. */
+  function seatPassenger(ride, passenger, seat) {
+    if (seat == null) return;
+    if (!SEATS.includes(seat)) throw new RideError('invalid_seat', '좌석 정보가 맞지 않아요. 차 화면의 QR을 다시 찍어 주세요.');
+    for (const other of ride.passengers) if (other !== passenger && other.seat === seat) other.seat = null;
+    passenger.seat = seat;
+  }
+
   function mustOwner(ride, ownerToken) {
     if (!ownerToken || ownerToken !== ride.ownerToken) throw new RideError('forbidden', '이 이동을 연 차량만 할 수 있어요.');
   }
@@ -67,7 +78,8 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
         return existing;
       }
       const t = now();
-      const ride = { code, catName, ownerToken: token(16), openedAt: t, expiresAt: t + RIDE_TTL_MS, passengers: [], chargedTripId: null };
+      // seats: 차량이 알려 준 동승석 상태 [{ seat, occupied }]. 좌석 센서가 없는 차는 null (휴대폰에서 자리를 고르지 않는다)
+      const ride = { code, catName, ownerToken: token(16), openedAt: t, expiresAt: t + RIDE_TTL_MS, passengers: [], chargedTripId: null, seats: null };
       rides.set(code, ride);
       return ride;
     },
@@ -76,8 +88,22 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
       return live(code);
     },
 
-    /** 승객이 휴대폰에서 이름을 넣을 때 부른다. commuting: 승객이 직접 고른 '출퇴근 길이에요' */
-    addPassenger(code, rawName, commuting) {
+    /** 차량 앱이 좌석 센서로 본 동승석 상태를 알린다. 휴대폰 자리 고르기에서 앉은 자리만 누를 수 있게 한다. */
+    setSeats(code, ownerToken, seats) {
+      const ride = mustRide(code);
+      mustOwner(ride, ownerToken);
+      if (!Array.isArray(seats) || seats.some((s) => !s || !SEATS.includes(s.seat) || typeof s.occupied !== 'boolean')) {
+        throw new RideError('invalid_seat', '좌석 정보가 맞지 않아요.');
+      }
+      ride.seats = seats.map((s) => ({ seat: s.seat, occupied: s.occupied }));
+      return ride;
+    },
+
+    /**
+     * 승객이 휴대폰에서 이름을 넣을 때 부른다.
+     * commuting: 승객이 직접 고른 '출퇴근 길이에요'. seat: 좌석 QR 로 들어왔으면 그 자리 (차량이 벨트·좌석 센서로 감지한 자리)
+     */
+    addPassenger(code, rawName, commuting, seat = null, picked = false) {
       const ride = mustRide(code);
       const name = normalizeName(rawName);
       if (!name) throw new RideError('invalid_name', `이름을 1~${MAX_NAME_LENGTH}자로 넣어 주세요.`);
@@ -87,8 +113,28 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
       if (ride.passengers.length >= MAX_PASSENGERS) {
         throw new RideError('full', `이 차에는 최대 ${MAX_PASSENGERS}명까지 탈 수 있어요.`);
       }
-      const passenger = { id: token(8), name, commuting: commuting === true, joinedAt: now(), payment: null, charge: null };
+      if (seat != null && !SEATS.includes(seat)) throw new RideError('invalid_seat', '좌석 정보가 맞지 않아요. 차 화면의 QR을 다시 찍어 주세요.');
+      // 휴대폰에서 직접 고른 자리: 사람이 앉아 있고, 아직 아무도 고르지 않은 자리만 된다
+      if (seat != null && picked) {
+        if (ride.seats && !ride.seats.some((s) => s.seat === seat && s.occupied)) {
+          throw new RideError('seat_not_occupied', '그 자리에는 앉은 사람이 없어요. 앉은 자리를 다시 골라 주세요.');
+        }
+        if (ride.passengers.some((p) => p.seat === seat)) {
+          throw new RideError('seat_taken', '이미 다른 분이 고른 자리예요. 앉은 자리를 다시 골라 주세요.');
+        }
+      }
+      const passenger = { id: token(8), name, commuting: commuting === true, seat: null, joinedAt: now(), payment: null, charge: null, alightedAt: null };
       ride.passengers.push(passenger);
+      seatPassenger(ride, passenger, seat);
+      return passenger;
+    },
+
+    /** 이미 탄 승객이 다른 자리 QR 을 찍었을 때: 자리 이동 */
+    moveSeat(code, id, seat) {
+      const ride = mustRide(code);
+      const passenger = this.getPassenger(code, id);
+      if (seat == null) throw new RideError('invalid_seat', '좌석 정보가 맞지 않아요.');
+      seatPassenger(ride, passenger, seat);
       return passenger;
     },
 
@@ -108,8 +154,31 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
     },
 
     /**
-     * 도착 후 차량 앱이 부른다. 사람별 금액을 테스트 결제한다.
-     * 같은 이동(tripId)으로 다시 부르면 결제를 다시 하지 않고 지난 결과를 돌려준다.
+     * 차량 앱이 하차를 판단했을 때 부른다 (좌석이 비고 일정 시간이 지남).
+     * 승객 휴대폰에 '하차 처리됐어요'를 보여 주고, 차량은 잠시 뒤 그 사람만 결제한다.
+     */
+    alight(code, ownerToken, name) {
+      const ride = mustRide(code);
+      mustOwner(ride, ownerToken);
+      const passenger = ride.passengers.find((p) => p.name === name);
+      if (!passenger) throw new RideError('not_found', '그 이름의 탑승자가 없어요.');
+      passenger.alightedAt ??= now();
+      return passenger;
+    },
+
+    /** 승객이 휴대폰에서 '아직 타고 있어요'를 눌렀을 때. 결제 전이면 하차를 취소한다. */
+    stay(code, id) {
+      const passenger = this.getPassenger(code, id);
+      if (!passenger.alightedAt) throw new RideError('not_alighted', '하차 처리된 상태가 아니에요.');
+      if (passenger.charge) throw new RideError('already_charged', '이미 결제됐어요. 운전자에게 말해 주세요.');
+      passenger.alightedAt = null;
+      return passenger;
+    },
+
+    /**
+     * 차량 앱이 부른다. 사람별 금액을 테스트 결제한다.
+     * 먼저 내린 사람은 내릴 때 한 명씩, 남은 사람은 도착 때 한꺼번에 부른다.
+     * 이미 결제한 사람은 다시 결제하지 않고 지난 결과를 돌려준다. 한 탑승 코드는 한 이동(tripId)에만 쓴다.
      * @param {{name: string, amount: number}[]} items
      */
     chargeRide(code, ownerToken, tripId, items) {
@@ -118,8 +187,7 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
       if (typeof tripId !== 'string' || !tripId || !Array.isArray(items) || items.length > MAX_PASSENGERS) {
         throw new RideError('invalid_charge', '결제 요청 형식이 맞지 않아요.');
       }
-      if (ride.chargedTripId === tripId) return ride.lastCharges;
-      if (ride.chargedTripId) throw new RideError('invalid_charge', '이 탑승 코드는 이미 다른 이동으로 결제했어요.');
+      if (ride.chargedTripId && ride.chargedTripId !== tripId) throw new RideError('invalid_charge', '이 탑승 코드는 이미 다른 이동으로 결제했어요.');
 
       // 하나라도 틀리면 아무도 결제하지 않는다
       for (const item of items) {
@@ -130,13 +198,13 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
       const charges = items.map(({ name, amount }) => {
         const passenger = ride.passengers.find((p) => p.name === name);
         if (!passenger) return { name, amount, status: 'not_boarded' };
+        if (passenger.charge) return { name, ...passenger.charge };
         if (!passenger.commuting) return { name, amount, status: 'not_commuting' };
         if (!passenger.payment) return { name, amount, status: 'no_method' };
         passenger.charge = { amount, status: 'paid', methodLabel: passenger.payment.label, receiptId: `mock_rc_${token(6)}`, paidAt: now() };
         return { name, ...passenger.charge };
       });
       ride.chargedTripId = tripId;
-      ride.lastCharges = charges;
       return charges;
     },
 

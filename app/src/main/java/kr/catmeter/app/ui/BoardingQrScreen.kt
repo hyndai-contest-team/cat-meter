@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import kr.catmeter.app.CatMeterSession
 import kr.catmeter.app.data.BoardingClient
 import kr.catmeter.app.trip.Boarding
+import kr.catmeter.app.trip.SeatPosition
 
 /**
  * 출발 전 탑승 QR.
@@ -48,6 +49,8 @@ fun BoardingQrScreen(
     onClose: () -> Unit,
     /** 이동 중 정차해서 띄운 QR. 중간에 탄 사람은 탄 뒤 구간만 나눠 낸다. */
     midTrip: Boolean = false,
+    /** 벨트·좌석 센서로 감지한 자리의 QR. 휴대폰 페이지가 이 자리를 미리 채운다. */
+    seat: SeatPosition? = null,
 ) {
     // 화면이 떠 있는 동안만 서버에서 탑승자를 받아 온다
     DisposableEffect(state.boardingCode) {
@@ -55,15 +58,31 @@ fun BoardingQrScreen(
         onDispose { session.closeBoarding() }
     }
     val qr = @Composable { size: Dp ->
-        QrBlock(state.boardingCode, state.boardingLink, car.restricted, size, onRetry = session::openBoarding)
+        QrBlock(state.boardingCode, state.boardingLink, car.restricted, size, seat, onRetry = session::openBoarding)
     }
-    val info = @Composable { BoardingInfo(state.passengers, state.riders) }
+    val info = @Composable {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            BoardingInfo(state.passengers, state.riders, pickSeat = seat == null && state.seats.isNotEmpty())
+            if (seat == null) WaitingSeats(state, onPrompt = session::promptSeat)
+        }
+    }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text(if (midTrip) "중간 탑승 QR" else "탑승 QR", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text(
-            if (midTrip) "지금 타는 분은 휴대폰으로 찍어 주세요 · 탄 뒤 구간만 나눠 내요"
-            else "함께 탈 사람은 출발 전에 휴대폰으로 찍어 주세요",
+            when {
+                seat != null -> "${seat.label} 탑승 QR"
+                midTrip -> "중간 탑승 QR"
+                else -> "탑승 QR"
+            },
+            fontSize = 24.sp, fontWeight = FontWeight.Bold,
+        )
+        Text(
+            when {
+                seat != null -> "${seat.label}에 앉은 분은 휴대폰으로 찍어 주세요" + if (midTrip) " · 탄 뒤 구간만 나눠 내요" else ""
+                midTrip -> "지금 타는 분은 휴대폰으로 찍어 주세요 · 탄 뒤 구간만 나눠 내요"
+                state.seats.isNotEmpty() -> "함께 탄 분은 모두 휴대폰으로 찍고, 앉은 자리를 골라 주세요"
+                else -> "함께 탈 사람은 출발 전에 휴대폰으로 찍어 주세요"
+            },
             color = Palette.sub, fontSize = 15.sp,
         )
 
@@ -87,14 +106,21 @@ fun BoardingQrScreen(
             }
         }
 
-        Button(onClick = onClose, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Text("탑승 확인 끝", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        if (seat != null) {
+            // 탑승 등록이 끝나면 자동으로 닫힌다. 아이·짐처럼 등록하지 않을 자리는 운전자가 넘긴다.
+            OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Text("이 자리는 나중에 할게요", fontSize = 17.sp)
+            }
+        } else {
+            Button(onClick = onClose, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Text("탑승 확인 끝", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
 
 @Composable
-private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted: Boolean, size: Dp, onRetry: () -> Unit) {
+private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted: Boolean, size: Dp, seat: SeatPosition?, onRetry: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         val notice = @Composable { text: String, color: Color ->
             Text(
@@ -111,7 +137,7 @@ private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted
             return@Column
         }
         val joinUrl = when (link) {
-            is CatMeterSession.BoardingLink.Ready -> link.joinUrl
+            is CatMeterSession.BoardingLink.Ready -> if (seat != null) "${link.joinUrl}?seat=${seat.name}" else link.joinUrl
             is CatMeterSession.BoardingLink.Offline -> {
                 notice("${link.reason}.\n이름을 직접 넣어 주세요.", Palette.warn)
                 OutlinedButton(onClick = onRetry) { Text("다시 연결", fontSize = 16.sp) }
@@ -136,11 +162,11 @@ private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BoardingInfo(passengers: List<String>, riders: List<BoardingClient.Rider>) {
+private fun BoardingInfo(passengers: List<String>, riders: List<BoardingClient.Rider>, pickSeat: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Step("1", "휴대폰 카메라로 QR을 찍어요")
-            Step("2", "열린 화면에서 이름을 넣으면 탑승 완료")
+            Step("2", if (pickSeat) "앉은 자리를 고르고 이름을 넣으면 탑승 완료" else "열린 화면에서 이름을 넣으면 탑승 완료")
             Step("3", "결제 수단을 한 번 등록하면 내릴 때 자동결제")
             Text("테스트 결제 · 실제 출금 없음", color = Palette.warn, fontSize = 13.sp)
         }
@@ -159,14 +185,32 @@ private fun BoardingInfo(passengers: List<String>, riders: List<BoardingClient.R
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     passengers.forEach { name ->
                         val rider = riders.firstOrNull { it.name == name }
+                        val who = rider?.seat?.let { "$name(${it.label})" } ?: name
                         when {
-                            rider == null -> Chip("$name · 직접 입력", Palette.sub)
-                            !rider.commuting -> Chip("$name · 출퇴근 아님", Palette.sub)
-                            rider.paymentLabel == null -> Chip("$name · 결제 미등록", Palette.warn)
-                            else -> Chip("$name · ${rider.paymentLabel}", Palette.ok)
+                            rider == null -> Chip("$who · 직접 입력", Palette.sub)
+                            !rider.commuting -> Chip("$who · 출퇴근 아님", Palette.sub)
+                            rider.paymentLabel == null -> Chip("$who · 결제 미등록", Palette.warn)
+                            else -> Chip("$who · ${rider.paymentLabel}", Palette.ok)
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** 앉았지만 아직 탑승 등록하지 않은 자리. 운전자가 '나중에'로 넘긴 자리의 QR 을 다시 띄울 수 있다. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WaitingSeats(state: CatMeterSession.State, onPrompt: (SeatPosition) -> Unit) {
+    val assigned = state.riders.mapNotNull { it.seat }.toSet()
+    val waiting = state.seats.filter { (seat, signal) -> signal.taken && !seat.isDriver && seat !in assigned }.keys.sorted()
+    if (waiting.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("앉았지만 아직 등록하지 않은 자리", color = Palette.sub, fontSize = 14.sp)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            waiting.forEach { seat ->
+                OutlinedButton(onClick = { onPrompt(seat) }) { Text("${seat.label} QR", fontSize = 15.sp) }
             }
         }
     }

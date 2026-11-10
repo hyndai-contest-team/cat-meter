@@ -50,11 +50,13 @@ data class TripRecord(
     val settledAtMs: Long? = null,
     /** 중간에 탄 사람의 탑승 지점. 없는 사람은 출발부터 탔다. */
     val joins: Map<String, JoinPoint> = emptyMap(),
+    /** 먼저 내린 사람의 하차 지점. 없는 사람은 도착까지 탔다. */
+    val leaves: Map<String, JoinPoint> = emptyMap(),
 ) {
     val durationMs: Long get() = (endedAtMs - startedAtMs).coerceAtLeast(0L)
     val bill: TripBill get() = TripBill.of(distanceKm, durationMs, energy)
-    /** 사람별 나눠 낼 금액. 중간에 탄 사람은 탄 뒤 구간만 낸다. */
-    val shares: Map<String, Int> get() = TripBill.shares(distanceKm, durationMs, energy, passengers, joins)
+    /** 사람별 나눠 낼 금액. 각자 탄 구간만 낸다. */
+    val shares: Map<String, Int> get() = TripBill.shares(distanceKm, durationMs, energy, passengers, joins, leaves)
 }
 
 /**
