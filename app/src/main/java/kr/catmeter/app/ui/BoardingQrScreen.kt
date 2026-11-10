@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import kr.catmeter.app.CatMeterSession
 import kr.catmeter.app.data.BoardingClient
 import kr.catmeter.app.trip.Boarding
+import kr.catmeter.app.trip.SeatPosition
 
 /**
  * 출발 전 탑승 QR.
@@ -48,6 +49,8 @@ fun BoardingQrScreen(
     onClose: () -> Unit,
     /** 이동 중 정차해서 띄운 QR. 중간에 탄 사람은 탄 뒤 구간만 나눠 낸다. */
     midTrip: Boolean = false,
+    /** 벨트·좌석 센서로 감지한 자리의 QR. 휴대폰 페이지가 이 자리를 미리 채운다. */
+    seat: SeatPosition? = null,
 ) {
     // 화면이 떠 있는 동안만 서버에서 탑승자를 받아 온다
     DisposableEffect(state.boardingCode) {
@@ -55,15 +58,25 @@ fun BoardingQrScreen(
         onDispose { session.closeBoarding() }
     }
     val qr = @Composable { size: Dp ->
-        QrBlock(state.boardingCode, state.boardingLink, car.restricted, size, onRetry = session::openBoarding)
+        QrBlock(state.boardingCode, state.boardingLink, car.restricted, size, seat, onRetry = session::openBoarding)
     }
     val info = @Composable { BoardingInfo(state.passengers, state.riders) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text(if (midTrip) "중간 탑승 QR" else "탑승 QR", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text(
-            if (midTrip) "지금 타는 분은 휴대폰으로 찍어 주세요 · 탄 뒤 구간만 나눠 내요"
-            else "함께 탈 사람은 출발 전에 휴대폰으로 찍어 주세요",
+            when {
+                seat != null -> "${seat.label} 탑승 QR"
+                midTrip -> "중간 탑승 QR"
+                else -> "탑승 QR"
+            },
+            fontSize = 24.sp, fontWeight = FontWeight.Bold,
+        )
+        Text(
+            when {
+                seat != null -> "${seat.label}에 앉은 분은 휴대폰으로 찍어 주세요" + if (midTrip) " · 탄 뒤 구간만 나눠 내요" else ""
+                midTrip -> "지금 타는 분은 휴대폰으로 찍어 주세요 · 탄 뒤 구간만 나눠 내요"
+                else -> "함께 탈 사람은 출발 전에 휴대폰으로 찍어 주세요"
+            },
             color = Palette.sub, fontSize = 15.sp,
         )
 
@@ -87,14 +100,21 @@ fun BoardingQrScreen(
             }
         }
 
-        Button(onClick = onClose, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Text("탑승 확인 끝", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        if (seat != null) {
+            // 탑승 등록이 끝나면 자동으로 닫힌다. 아이·짐처럼 등록하지 않을 자리는 운전자가 넘긴다.
+            OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Text("이 자리는 나중에 할게요", fontSize = 17.sp)
+            }
+        } else {
+            Button(onClick = onClose, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Text("탑승 확인 끝", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
 
 @Composable
-private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted: Boolean, size: Dp, onRetry: () -> Unit) {
+private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted: Boolean, size: Dp, seat: SeatPosition?, onRetry: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         val notice = @Composable { text: String, color: Color ->
             Text(
@@ -111,7 +131,7 @@ private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted
             return@Column
         }
         val joinUrl = when (link) {
-            is CatMeterSession.BoardingLink.Ready -> link.joinUrl
+            is CatMeterSession.BoardingLink.Ready -> if (seat != null) "${link.joinUrl}?seat=${seat.name}" else link.joinUrl
             is CatMeterSession.BoardingLink.Offline -> {
                 notice("${link.reason}.\n이름을 직접 넣어 주세요.", Palette.warn)
                 OutlinedButton(onClick = onRetry) { Text("다시 연결", fontSize = 16.sp) }
@@ -159,11 +179,12 @@ private fun BoardingInfo(passengers: List<String>, riders: List<BoardingClient.R
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     passengers.forEach { name ->
                         val rider = riders.firstOrNull { it.name == name }
+                        val who = rider?.seat?.let { "$name(${it.label})" } ?: name
                         when {
-                            rider == null -> Chip("$name · 직접 입력", Palette.sub)
-                            !rider.commuting -> Chip("$name · 출퇴근 아님", Palette.sub)
-                            rider.paymentLabel == null -> Chip("$name · 결제 미등록", Palette.warn)
-                            else -> Chip("$name · ${rider.paymentLabel}", Palette.ok)
+                            rider == null -> Chip("$who · 직접 입력", Palette.sub)
+                            !rider.commuting -> Chip("$who · 출퇴근 아님", Palette.sub)
+                            rider.paymentLabel == null -> Chip("$who · 결제 미등록", Palette.warn)
+                            else -> Chip("$who · ${rider.paymentLabel}", Palette.ok)
                         }
                     }
                 }

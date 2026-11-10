@@ -23,8 +23,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Pleos Connect 에뮬레이터 v2.1.0 은 Virtual Console 의 좌석 점유와 SDK 값이 반대로 들어온다 (README 좌석 실험)
+            buildConfigField("boolean", "SEAT_OCCUPANCY_INVERTED", "true")
+        }
         release {
             isMinifyEnabled = false
+            // 실차 값 방향은 확인 전. 확인되면 맞춘다.
+            buildConfigField("boolean", "SEAT_OCCUPANCY_INVERTED", "false")
         }
     }
     compileOptions {
