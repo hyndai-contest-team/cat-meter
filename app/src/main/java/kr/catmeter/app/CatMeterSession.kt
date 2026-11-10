@@ -19,6 +19,7 @@ import kr.catmeter.app.car.NaviSource
 import kr.catmeter.app.car.PleosVehicleSource
 import kr.catmeter.app.data.CatMeterStore
 import kr.catmeter.app.trip.Accessory
+import kr.catmeter.app.trip.Boarding
 import kr.catmeter.app.trip.CatProfile
 import kr.catmeter.app.trip.CommuteRule
 import kr.catmeter.app.trip.EnergyProfile
@@ -54,6 +55,8 @@ class CatMeterSession(context: Context) {
         val destinationName: String? = null,
         /** 출발 버튼 없이 내비 안내 + 주행으로 자동 시작했는지 */
         val autoStarted: Boolean = false,
+        /** 이번 이동의 탑승 QR 코드. 이동이 끝나면 새로 만든다. */
+        val boardingCode: String = Boarding.newCode(),
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -255,7 +258,9 @@ class CatMeterSession(context: Context) {
     }
 
     /** 영수증을 닫고 다음 이동을 준비한다 */
-    fun backToSetup() = _state.update { it.copy(phase = Phase.SETUP, record = null, destinationName = null) }
+    fun backToSetup() = _state.update {
+        it.copy(phase = Phase.SETUP, record = null, destinationName = null, boardingCode = Boarding.newCode())
+    }
 
     private fun toLocal(ms: Long): LocalDateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(ms), ZoneId.of("Asia/Seoul"))
 

@@ -1,6 +1,5 @@
 package kr.catmeter.app.ui
 
-import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,15 +21,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.EncodeHintType
-import com.google.zxing.qrcode.QRCodeWriter
 import kr.catmeter.app.CatMeterSession
 import kr.catmeter.app.trip.TripRecord
 
@@ -91,15 +84,3 @@ fun SettlePanel(session: CatMeterSession, record: TripRecord) {
         )
     }
 }
-
-private fun qrBitmap(content: String, sizePx: Int = 512): ImageBitmap {
-    val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx, mapOf(EncodeHintType.MARGIN to 1))
-    val pixels = IntArray(sizePx * sizePx) { i ->
-        if (matrix[i % sizePx, i / sizePx]) Color.Black.toArgbInt() else Color.White.toArgbInt()
-    }
-    return Bitmap.createBitmap(pixels, sizePx, sizePx, Bitmap.Config.ARGB_8888).asImageBitmap()
-}
-
-private fun Color.toArgbInt(): Int = android.graphics.Color.argb(
-    (alpha * 255).toInt(), (red * 255).toInt(), (green * 255).toInt(), (blue * 255).toInt(),
-)
