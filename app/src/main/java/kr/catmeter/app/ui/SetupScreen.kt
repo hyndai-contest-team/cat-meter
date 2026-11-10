@@ -56,7 +56,7 @@ import java.time.ZoneId
 fun SetupScreen(session: CatMeterSession, state: CatMeterSession.State, car: CarView, wide: Boolean) {
     var showBoardingQr by rememberSaveable { mutableStateOf(false) }
     if (showBoardingQr) {
-        BoardingQrScreen(state, car, wide, onClose = { showBoardingQr = false })
+        BoardingQrScreen(session, state, car, wide, onClose = { showBoardingQr = false })
         return
     }
     val openBoardingQr = { showBoardingQr = true }

@@ -9,10 +9,16 @@ import android.content.Intent
  * adb shell am broadcast --user current -a kr.catmeter.app.DEBUG_ROUTE \
  *   -n kr.catmeter.app/.DebugRouteReceiver --ed lat 37.4979 --ed lon 127.0276 --es name 강남역
  * 경로 취소: ... -n kr.catmeter.app/.DebugRouteReceiver --ez cancel true
+ * 시연용 출퇴근 판정 켜기/끄기 (자동결제 테스트): ... -n kr.catmeter.app/.DebugRouteReceiver --ez demoCommute true
  */
 class DebugRouteReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val navi = (context.applicationContext as CatMeterApplication).session.navi
+        val session = (context.applicationContext as CatMeterApplication).session
+        if (intent.hasExtra("demoCommute")) {
+            session.demoCommute = intent.getBooleanExtra("demoCommute", false)
+            return
+        }
+        val navi = session.navi
         if (intent.getBooleanExtra("cancel", false)) {
             navi.cancelRouteForTest()
             return

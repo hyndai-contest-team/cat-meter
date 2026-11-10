@@ -18,8 +18,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kr.catmeter.app.CatMeterSession
+import kr.catmeter.app.data.BoardingClient
 import kr.catmeter.app.trip.Boarding
 
 /**
@@ -37,9 +40,16 @@ import kr.catmeter.app.trip.Boarding
  * (QR 화면은 차가 서 있을 때만 띄운다는 Pleos 주의분산 원칙과 팀 결제 설계 문서의 규칙).
  */
 @Composable
-fun BoardingQrScreen(state: CatMeterSession.State, car: CarView, wide: Boolean, onClose: () -> Unit) {
-    val qr = @Composable { size: Dp -> QrBlock(state.boardingCode, car.restricted, size) }
-    val info = @Composable { BoardingInfo(state.passengers) }
+fun BoardingQrScreen(session: CatMeterSession, state: CatMeterSession.State, car: CarView, wide: Boolean, onClose: () -> Unit) {
+    // 화면이 떠 있는 동안만 서버에서 탑승자를 받아 온다
+    DisposableEffect(state.boardingCode) {
+        session.openBoarding()
+        onDispose { session.closeBoarding() }
+    }
+    val qr = @Composable { size: Dp ->
+        QrBlock(state.boardingCode, state.boardingLink, car.restricted, size, onRetry = session::openBoarding)
+    }
+    val info = @Composable { BoardingInfo(state.passengers, state.riders) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("탑승 QR", fontSize = 24.sp, fontWeight = FontWeight.Bold)
@@ -72,20 +82,35 @@ fun BoardingQrScreen(state: CatMeterSession.State, car: CarView, wide: Boolean, 
 }
 
 @Composable
-private fun QrBlock(code: String, restricted: Boolean, size: Dp) {
+private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted: Boolean, size: Dp, onRetry: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (restricted) {
+        val notice = @Composable { text: String, color: Color ->
             Text(
-                "주행 중에는 QR을 띄우지 않아요.\n차를 세우면 다시 보여 드려요.",
-                color = Palette.warn, fontSize = 16.sp,
+                text,
+                color = color, fontSize = 16.sp,
                 modifier = Modifier
                     .size(size)
-                    .background(Palette.warn.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
+                    .background(color.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
                     .padding(16.dp),
             )
+        }
+        if (restricted) {
+            notice("주행 중에는 QR을 띄우지 않아요.\n차를 세우면 다시 보여 드려요.", Palette.warn)
             return@Column
         }
-        val image = remember(code) { qrBitmap(Boarding.link(code)) }
+        val joinUrl = when (link) {
+            is CatMeterSession.BoardingLink.Ready -> link.joinUrl
+            is CatMeterSession.BoardingLink.Offline -> {
+                notice("${link.reason}.\n이름을 직접 넣어 주세요.", Palette.warn)
+                OutlinedButton(onClick = onRetry) { Text("다시 연결", fontSize = 16.sp) }
+                return@Column
+            }
+            CatMeterSession.BoardingLink.Idle, CatMeterSession.BoardingLink.Connecting -> {
+                notice("탑승 서버에 연결하는 중이에요…", Palette.sub)
+                return@Column
+            }
+        }
+        val image = remember(joinUrl) { qrBitmap(joinUrl) }
         Box(
             Modifier
                 .background(Color.White, RoundedCornerShape(16.dp))
@@ -99,12 +124,13 @@ private fun QrBlock(code: String, restricted: Boolean, size: Dp) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BoardingInfo(passengers: List<String>) {
+private fun BoardingInfo(passengers: List<String>, riders: List<BoardingClient.Rider>) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Step("1", "휴대폰 카메라로 QR을 찍어요")
             Step("2", "열린 화면에서 이름을 넣으면 탑승 완료")
-            Step("3", "내릴 때는 아무것도 안 해도 돼요")
+            Step("3", "결제 수단을 한 번 등록하면 내릴 때 자동결제")
+            Text("테스트 결제 · 실제 출금 없음", color = Palette.warn, fontSize = 13.sp)
         }
 
         Column(
@@ -119,7 +145,15 @@ private fun BoardingInfo(passengers: List<String>) {
                 Text("아직 탄 사람이 없어요", color = Palette.sub, fontSize = 15.sp)
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    passengers.forEach { Chip(it, Palette.ok) }
+                    passengers.forEach { name ->
+                        val rider = riders.firstOrNull { it.name == name }
+                        when {
+                            rider == null -> Chip("$name · 직접 입력", Palette.sub)
+                            !rider.commuting -> Chip("$name · 출퇴근 아님", Palette.sub)
+                            rider.paymentLabel == null -> Chip("$name · 결제 미등록", Palette.warn)
+                            else -> Chip("$name · ${rider.paymentLabel}", Palette.ok)
+                        }
+                    }
                 }
             }
         }
