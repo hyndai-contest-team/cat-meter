@@ -2,6 +2,7 @@ package kr.catmeter.app.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kr.catmeter.app.trip.SeatPosition
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -27,6 +28,10 @@ class BoardingClient(private val baseUrl: String) {
         val commuting: Boolean,
         /** 등록한 결제 수단 이름. 없으면 null */
         val paymentLabel: String?,
+        /** 좌석 QR 로 탔으면 그 자리 */
+        val seat: SeatPosition? = null,
+        /** 서버에 하차로 기록됐는지. 차량이 하차를 알렸는데 false 면 승객이 '아직 타고 있어요'를 누른 것이다. */
+        val alighted: Boolean = false,
     )
 
     data class Charge(val name: String, val amount: Int, val status: Status, val methodLabel: String?) {
@@ -49,11 +54,27 @@ class BoardingClient(private val baseUrl: String) {
                 name = p.getString("name"),
                 commuting = p.optBoolean("commuting", false),
                 paymentLabel = p.optString("paymentLabel").takeUnless { p.isNull("paymentLabel") || it.isBlank() },
+                seat = SeatPosition.ofName(p.optString("seat").takeUnless { p.isNull("seat") }),
+                alighted = p.optBoolean("alighted", false),
             )
         }
     }
 
-    /** 도착 후 사람별 금액을 결제한다. 같은 tripId 로 다시 부르면 서버가 지난 결과를 돌려준다 (두 번 결제하지 않는다). */
+    /** 좌석 센서로 본 동승석 상태를 알린다. 휴대폰 자리 고르기에서 사람이 앉은 자리만 누를 수 있게 된다. */
+    suspend fun putSeats(code: String, ownerToken: String, occupied: Map<SeatPosition, Boolean>) = withContext(Dispatchers.IO) {
+        val seats = JSONArray()
+        occupied.forEach { (seat, on) -> seats.put(JSONObject().put("seat", seat.name).put("occupied", on)) }
+        request("PUT", "/api/rides/$code/seats", JSONObject().put("seats", seats).toString(), ownerToken)
+        Unit
+    }
+
+    /** 하차 판단을 서버에 알린다. 승객 휴대폰에 '하차 처리됐어요'가 뜬다. */
+    suspend fun alight(code: String, ownerToken: String, name: String) = withContext(Dispatchers.IO) {
+        request("POST", "/api/rides/$code/alights", JSONObject().put("name", name).toString(), ownerToken)
+        Unit
+    }
+
+    /** 사람별 금액을 결제한다. 먼저 내린 사람은 내릴 때, 남은 사람은 도착 때 부른다. 같은 tripId 로 다시 부르면 서버가 지난 결과를 돌려준다 (두 번 결제하지 않는다). */
     suspend fun charge(code: String, ownerToken: String, tripId: String, amounts: Map<String, Int>): List<Charge> =
         withContext(Dispatchers.IO) {
             val items = JSONArray()

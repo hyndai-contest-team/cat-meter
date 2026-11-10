@@ -16,7 +16,7 @@
   html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
   body { min-height: 100dvh; display: flex; justify-content: center; }
   main {
-    width: 100%; max-width: 440px;
+    width: 100%; max-width: 440px; min-width: 0;
     padding: max(28px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
     display: flex; flex-direction: column; gap: 20px;
   }
@@ -56,6 +56,15 @@
   .error { color: var(--warn); font-size: 15px; margin: 0; min-height: 1.2em; }
   .center { text-align: center; align-items: center; }
   .ok { color: var(--ok); }
+  .seatmap { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border-radius: 20px; padding: 14px; }
+  .seatmap .front { text-align: center; color: var(--sub); font-size: 13px; }
+  .seatrow { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 8px; }
+  .seatbtn { min-width: 0; font-size: 14px; font-weight: 600; padding: 14px 4px; border-radius: 14px; display: flex; flex-direction: column; gap: 4px; align-items: center; word-break: keep-all; text-align: center; }
+  .seatbtn small { font-size: 12px; font-weight: 500; }
+  .seatbtn.free { background: var(--accent); color: var(--on-accent); }
+  .seatbtn:disabled { background: var(--surface-high); color: var(--sub); opacity: 1; }
+  .linkbtn { background: none; color: var(--sub); font-size: 14px; font-weight: 500; padding: 8px; text-decoration: underline; }
+  .seat { align-self: flex-start; font-size: 15px; font-weight: 600; color: var(--ok); background: rgba(127, 209, 168, .14); padding: 6px 12px; border-radius: 10px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -73,6 +82,18 @@
     <p class="lead" id="invalid-reason">탑승 코드가 없거나 시간이 지났어요. 차 화면의 QR을 다시 찍어 주세요.</p>
   </section>
 
+  <!-- 0단계: 자리 고르기 (일반 탑승 QR 로 들어왔고, 차량이 좌석 상태를 알려 줬을 때) -->
+  <section id="pick" hidden>
+    <div>
+      <h1>앉은 자리를 골라 주세요</h1>
+      <p class="lead">차가 사람이 앉은 것을 감지한 자리만 누를 수 있어요.</p>
+    </div>
+    <div class="seatmap" id="seatmap"></div>
+    <p class="muted" id="pick-none-note" hidden></p>
+    <p class="error" id="pick-error" role="alert"></p>
+    <button class="linkbtn" id="pick-none" type="button">목록에 내 자리가 없어요</button>
+  </section>
+
   <!-- 1단계: 이름과 출퇴근 여부 -->
   <section id="join" hidden>
     <div class="cat" aria-hidden="true">🐱</div>
@@ -80,6 +101,8 @@
       <h1><span class="cat-name">고양이</span> 차에 타요</h1>
       <p class="lead">이름을 넣으면 탑승이 끝나요. 내릴 때는 아무것도 안 해도 돼요.</p>
     </div>
+    <span class="seat" id="join-seat" hidden></span>
+    <button class="linkbtn" id="repick" type="button" hidden>자리 다시 고르기</button>
     <form id="join-form" novalidate>
       <label for="name">내 이름 (차 화면에 보여요)</label>
       <input id="name" type="text" autocomplete="nickname" maxlength="10" placeholder="예: 민수" required>
@@ -109,11 +132,29 @@
     <p class="error" id="pay-error" role="alert"></p>
   </section>
 
+  <!-- 이미 탄 사람이 다른 좌석 QR 을 찍었을 때 -->
+  <section id="move" hidden>
+    <div>
+      <h1>자리를 옮기셨나요?</h1>
+      <p class="lead" id="move-lead"></p>
+    </div>
+    <button id="move-submit" type="button">네, 옮겼어요</button>
+    <button id="move-skip" type="button" style="background: var(--surface-high); color: var(--text)">아니요, 그대로예요</button>
+    <p class="error" id="move-error" role="alert"></p>
+  </section>
+
   <!-- 3단계: 탑승 완료와 결제 결과 -->
   <section id="done" class="center" hidden>
     <div class="cat" aria-hidden="true">😺</div>
     <h1>탑승 완료!</h1>
     <p class="lead" id="done-lead"></p>
+  </section>
+
+  <section class="card" id="alight" hidden>
+    <h2>하차 처리됐어요</h2>
+    <p class="muted">곧 탄 구간만큼 자동결제돼요. 아직 차에 타고 있다면 눌러 주세요.</p>
+    <button id="stay" type="button">아직 타고 있어요</button>
+    <p class="error" id="stay-error" role="alert"></p>
   </section>
 
   <section class="card" id="receipt" hidden>
@@ -139,6 +180,22 @@
   const NAME_KEY = 'catmeter.name';
   const ME_KEY = `catmeter.ride.${code}`;
   const api = (path = '') => `/api/rides/${encodeURIComponent(code)}${path}`;
+  /** 좌석 QR 로 들어왔으면 차량이 감지한 자리 (trip/Seats.kt 와 같은 이름) */
+  const SEAT_LABELS = {
+    ROW_1_CENTER: '앞 가운데', ROW_1_RIGHT: '조수석',
+    ROW_2_LEFT: '뒷좌석 왼쪽', ROW_2_CENTER: '뒷좌석 가운데', ROW_2_RIGHT: '뒷좌석 오른쪽',
+    ROW_3_LEFT: '3열 왼쪽', ROW_3_CENTER: '3열 가운데', ROW_3_RIGHT: '3열 오른쪽',
+  };
+  const seatParam = new URLSearchParams(location.search).get('seat');
+  /** 좌석 QR(자리 하나)로 들어왔으면 그 자리 */
+  const seatFromQr = Object.hasOwn(SEAT_LABELS, seatParam ?? '') ? seatParam : null;
+  /** 일반 QR 로 들어와 자리 고르기에서 고른 자리 */
+  let pickedSeat = null;
+  let skipPick = false;
+  let latestRide = null;
+  let pickTimer = null;
+  let moveDismissed = false;
+  const currentSeat = () => seatFromQr ?? pickedSeat;
   let me = null;
   let pollTimer = null;
 
@@ -150,7 +207,8 @@
   $('code').textContent = code ? `탑승 코드 ${code.slice(0, 4)}-${code.slice(4)}` : '탑승 코드 없음';
 
   function show(id) {
-    for (const s of ['loading', 'invalid', 'join', 'pay', 'done']) $(s).hidden = s !== id;
+    for (const s of ['loading', 'invalid', 'pick', 'join', 'pay', 'move', 'done']) $(s).hidden = s !== id;
+    if (id !== 'pick') stopPickPolling();
   }
 
   function invalid(message) {
@@ -159,6 +217,7 @@
   }
 
   function renderRide(ride) {
+    latestRide = ride;
     for (const el of document.querySelectorAll('.cat-name')) el.textContent = ride.catName;
     $('riders').hidden = false;
     $('count').textContent = ride.passengers.length;
@@ -171,25 +230,126 @@
     }));
   }
 
+  /** 고를 수 있는 자리: 사람이 앉아 있고 아직 아무도 고르지 않은 자리 */
+  function freeSeats() {
+    return (latestRide?.seats ?? []).filter((s) => s.occupied && !s.takenBy);
+  }
+
+  /** 차가 좌석 상태를 알려 줬으면 자리부터 고른다. 고를 자리가 없어도 배치도와 안내를 보여 준다. */
+  function needsPick() {
+    return !me && !seatFromQr && !pickedSeat && !skipPick && Array.isArray(latestRide?.seats) && latestRide.seats.length > 0;
+  }
+
+  /** 차 좌석 배치도. 운전석은 1열 왼쪽 (한국 차 기준) */
+  function renderSeatMap() {
+    const seats = new Map((latestRide?.seats ?? []).map((s) => [s.seat, s]));
+    const rows = [
+      ['ROW_1_LEFT', 'ROW_1_CENTER', 'ROW_1_RIGHT'],
+      ['ROW_2_LEFT', 'ROW_2_CENTER', 'ROW_2_RIGHT'],
+      ['ROW_3_LEFT', 'ROW_3_CENTER', 'ROW_3_RIGHT'],
+    ];
+    const front = document.createElement('div');
+    front.className = 'front';
+    front.textContent = '▲ 차 앞쪽';
+    const children = [front];
+    rows.forEach((row, i) => {
+      const cells = row.filter((id) => (i === 0 && id === 'ROW_1_LEFT') || seats.has(id));
+      if (cells.length === 0 || (i === 0 && cells.length === 1 && !seats.size)) return;
+      const el = document.createElement('div');
+      el.className = 'seatrow';
+      el.style.setProperty('--cols', String(cells.length));
+      for (const id of cells) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'seatbtn';
+        const s = seats.get(id);
+        let state;
+        if (id === 'ROW_1_LEFT') { state = '운전석'; b.disabled = true; }
+        else if (s.takenBy) { state = s.takenBy; b.disabled = true; }
+        else if (!s.occupied) { state = '빈자리'; b.disabled = true; }
+        else { state = '여기 앉았어요'; b.classList.add('free'); b.addEventListener('click', () => pickSeat(id)); }
+        const label = document.createElement('span');
+        label.textContent = id === 'ROW_1_LEFT' ? '🚗' : SEAT_LABELS[id];
+        const small = document.createElement('small');
+        small.textContent = state;
+        b.append(label, small);
+        el.append(b);
+      }
+      children.push(el);
+    });
+    $('seatmap').replaceChildren(...children);
+
+    // 고를 자리가 없으면: 모두 등록됐거나, 차가 내 자리를 감지하지 못한 경우다
+    const none = freeSeats().length === 0;
+    const anyOccupied = (latestRide?.seats ?? []).some((s) => s.occupied);
+    $('pick-none-note').hidden = !none;
+    $('pick-none-note').textContent = anyOccupied
+      ? '앉은 자리가 모두 등록됐어요. 차가 감지하지 못한 자리에 앉으셨다면 아래 버튼을 눌러 주세요.'
+      : '차가 아직 앉은 사람을 감지하지 못했어요. 안전벨트를 매면 다시 확인해요. 바로 타려면 아래 버튼을 눌러 주세요.';
+    $('pick-none').className = none ? '' : 'linkbtn';
+    $('pick-none').textContent = none ? '내 자리 없이 탈게요' : '목록에 내 자리가 없어요';
+  }
+
+  function pickSeat(id) {
+    pickedSeat = id;
+    $('pick-error').textContent = '';
+    renderMe();
+  }
+
+  /** 자리 고르기 화면이 떠 있는 동안 좌석 상태를 다시 받아 온다 (다른 사람이 먼저 고르거나 새로 앉음) */
+  function startPickPolling() {
+    if (pickTimer) return;
+    pickTimer = setInterval(async () => {
+      try {
+        const r = await request();
+        if (!r.ok) return;
+        renderRide(r.body);
+        if (!me && !pickedSeat) renderMe();
+      } catch {}
+    }, 3000);
+  }
+  function stopPickPolling() {
+    clearInterval(pickTimer);
+    pickTimer = null;
+  }
+
   /** 내 탑승 정보에 맞는 단계를 보여 준다 */
   function renderMe() {
-    if (!me) return show('join');
+    if (!me) {
+      if (needsPick()) {
+        renderSeatMap();
+        show('pick');
+        return startPickPolling();
+      }
+      const seat = currentSeat();
+      $('join-seat').hidden = !seat;
+      if (seat) $('join-seat').textContent = `📍 ${SEAT_LABELS[seat]}에 앉으셨네요`;
+      $('repick').hidden = !pickedSeat;
+      return show('join');
+    }
+    const seat = seatFromQr;
+    if (seat && me.seat !== seat && !moveDismissed) {
+      $('move-lead').textContent = `${me.name}님, ${SEAT_LABELS[seat]}(으)로 옮기셨으면 눌러 주세요. 다시 탈 필요는 없어요.`;
+      return show('move');
+    }
     if (me.commuting && !me.payment) return show('pay');
     show('done');
+    const where = me.seat ? `${SEAT_LABELS[me.seat]} · ` : '';
     $('done-lead').textContent = me.commuting
-      ? `${me.name}님, 차 화면에 이름이 떴는지 확인해 주세요.`
-      : `${me.name}님, 출퇴근 길이 아니라서 결제 없이 냥만 표시돼요.`;
+      ? `${where}${me.name}님, 차 화면에 이름이 떴는지 확인해 주세요.`
+      : `${where}${me.name}님, 출퇴근 길이 아니라서 결제 없이 냥만 표시돼요.`;
     $('receipt').hidden = !me.commuting;
     $('receipt-method').textContent = me.payment ? me.payment.label : '-';
     const paid = me.charge && me.charge.status === 'paid';
+    $('alight').hidden = !(me.commuting && me.alighted && !me.charge);
     $('receipt-paid').hidden = !paid;
     $('receipt-wait').hidden = paid;
     $('receipt-title').textContent = paid ? '결제 영수증' : '결제 정보';
     if (paid) {
       $('receipt-amount').textContent = me.charge.amount.toLocaleString('ko-KR');
       stopPolling();
-    } else if (me.commuting && me.payment) {
-      startPolling();
+    } else if (me.commuting) {
+      startPolling();   // 하차 안내와 결제 결과를 기다린다
     }
   }
 
@@ -214,7 +374,7 @@
       if (!ride.ok) return invalid(ride.body.message);
       renderRide(ride.body);
       $('name').value = store.get(NAME_KEY) || '';
-      show('join');
+      renderMe();
     } catch {
       invalid('서버에 연결할 수 없어요. 차와 같은 와이파이에 연결돼 있는지 확인해 주세요.');
     }
@@ -248,9 +408,21 @@
       const res = await request('/passengers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, commuting: $('commuting').checked }),
+        body: JSON.stringify({ name, commuting: $('commuting').checked, seat: currentSeat(), picked: pickedSeat != null }),
       });
-      if (!res.ok) { $('join-error').textContent = res.body.message || '탑승하지 못했어요. 다시 시도해 주세요.'; return; }
+      if (!res.ok) {
+        // 고른 자리를 다른 사람이 먼저 골랐거나 그 사이 자리가 비었으면 다시 고른다
+        if (pickedSeat && (res.body.error === 'seat_taken' || res.body.error === 'seat_not_occupied')) {
+          pickedSeat = null;
+          const r = await request();
+          if (r.ok) renderRide(r.body);
+          renderMe();
+          $('pick-error').textContent = res.body.message;
+          return;
+        }
+        $('join-error').textContent = res.body.message || '탑승하지 못했어요. 다시 시도해 주세요.';
+        return;
+      }
       me = res.body.passenger;
       store.set(NAME_KEY, me.name);
       store.set(ME_KEY, me.id);
@@ -260,6 +432,44 @@
       $('join-error').textContent = '서버에 연결할 수 없어요. 잠시 뒤 다시 눌러 주세요.';
     } finally {
       $('join-submit').disabled = false;
+    }
+  });
+
+  $('move-submit').addEventListener('click', async () => {
+    $('move-submit').disabled = true;
+    $('move-error').textContent = '';
+    try {
+      const res = await request(`/passengers/${me.id}/seat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seat: seatFromQr }),
+      });
+      if (!res.ok) { $('move-error').textContent = res.body.message || '자리를 옮기지 못했어요.'; return; }
+      me = res.body.passenger;
+      renderRide(res.body.ride);
+      renderMe();
+    } catch {
+      $('move-error').textContent = '서버에 연결할 수 없어요. 잠시 뒤 다시 눌러 주세요.';
+    } finally {
+      $('move-submit').disabled = false;
+    }
+  });
+  $('move-skip').addEventListener('click', () => { moveDismissed = true; renderMe(); });
+  $('repick').addEventListener('click', () => { pickedSeat = null; renderMe(); });
+  $('pick-none').addEventListener('click', () => { skipPick = true; renderMe(); });
+
+  $('stay').addEventListener('click', async () => {
+    $('stay').disabled = true;
+    $('stay-error').textContent = '';
+    try {
+      const res = await request(`/passengers/${me.id}/stay`, { method: 'POST' });
+      if (!res.ok) { $('stay-error').textContent = res.body.message || '처리하지 못했어요.'; return; }
+      me = res.body.passenger;
+      renderMe();
+    } catch {
+      $('stay-error').textContent = '서버에 연결할 수 없어요. 잠시 뒤 다시 눌러 주세요.';
+    } finally {
+      $('stay').disabled = false;
     }
   });
 

@@ -62,6 +62,35 @@ class TripBillTest {
     }
 
     @Test
+    fun `early leaver pays only until getting off`() {
+        // A 는 12km·15분에 내림: 앞 구간 3,050 을 A·B 가 1,525씩, 뒤 구간 3,050 은 B 혼자
+        val s = TripBill.shares(24f, 30 * 60_000L, fuel, listOf("A", "B"), emptyMap(), mapOf("A" to half))
+        assertEquals(1_530, s["A"])   // 1,525 → 1,530
+        assertEquals(4_580, s["B"])   // 1,525 + 3,050 = 4,575 → 4,580
+    }
+
+    @Test
+    fun `early leaver amount does not change with later events`() {
+        // A 가 내린 뒤 C 가 타도 A 의 금액은 그대로다
+        val atLeave = TripBill.shares(12f, 15 * 60_000L, fuel, listOf("A", "B"), emptyMap(), mapOf("A" to half))
+        val later = TripBill.shares(
+            24f, 30 * 60_000L, fuel, listOf("A", "B", "C"),
+            mapOf("C" to JoinPoint(18f, 20 * 60_000L)), mapOf("A" to half),
+        )
+        assertEquals(atLeave["A"], later["A"])
+    }
+
+    @Test
+    fun `join and leave in the middle pays only the middle`() {
+        val s = TripBill.shares(
+            24f, 30 * 60_000L, fuel, listOf("M"),
+            mapOf("M" to JoinPoint(6f, 7 * 60_000L + 30_000L)), mapOf("M" to JoinPoint(18f, 22 * 60_000L + 30_000L)),
+        )
+        // 6km·7.5분 = 600+70+850 = 1,520 / 18km·22.5분 = 1,800+220+2,550 = 4,570 → 3,050
+        assertEquals(mapOf("M" to 3_050), s)
+    }
+
+    @Test
     fun `vehicle efficiency outside plausible range falls back`() {
         assertNull(EnergyProfile.fromVehicle(EnergyKind.EV, 160f))   // Wh/km 같은 다른 단위
         assertNull(EnergyProfile.fromVehicle(EnergyKind.FUEL, 0f))

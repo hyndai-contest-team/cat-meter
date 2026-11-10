@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kr.catmeter.app.CatMeterSession
+import kr.catmeter.app.data.BoardingClient
 import kr.catmeter.app.trip.CatActivity
 import kr.catmeter.app.trip.TripBill
 import kr.catmeter.app.trip.TripTracker
@@ -70,7 +71,7 @@ fun DriveScreen(session: CatMeterSession, state: CatMeterSession.State, car: Car
             if (showCat) catPanel(Modifier.weight(1.2f).fillMaxHeight())
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 NyangMeter(bill, live, car, state.autoStarted, totalSize = 56.sp, valueSize = 32.sp)
-                Details(live, state.passengers, state.midJoins.keys)
+                Details(live, state)
                 Spacer(Modifier.weight(1f))
                 ArrivalControls(session, state, canFinish, openBoardingQr)
             }
@@ -141,7 +142,8 @@ private fun NyangValue(nyang: Int, size: TextUnit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Details(live: TripTracker.Snapshot, passengers: List<String>, midJoined: Set<String>) {
+private fun Details(live: TripTracker.Snapshot, state: CatMeterSession.State) {
+    val passengers = state.passengers
     Column(
         Modifier
             .fillMaxWidth()
@@ -158,10 +160,32 @@ private fun Details(live: TripTracker.Snapshot, passengers: List<String>, midJoi
             Spacer(Modifier.height(4.dp))
             Text("함께 타는 중", color = Palette.sub, fontSize = 14.sp)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                passengers.forEach { Chip(if (it in midJoined) "$it · 중간 탑승" else it, Palette.accent) }
+                passengers.forEach { name -> RiderChip(name, state) }
             }
         }
     }
+}
+
+/** 탑승자 상태: 중간 탑승, 내리는 중(자리가 빔), 하차 후 결제 대기·결제됨 */
+@Composable
+private fun RiderChip(name: String, state: CatMeterSession.State) {
+    val alight = state.alights[name]
+    val (text, color) = when {
+        alight != null -> when (alight.status) {
+            CatMeterSession.AlightStatus.NOTIFYING, CatMeterSession.AlightStatus.GRACE -> "$name · 하차 · 결제 대기" to Palette.sub
+            CatMeterSession.AlightStatus.CHARGING -> "$name · 하차 · 결제 중" to Palette.sub
+            CatMeterSession.AlightStatus.AT_ARRIVAL -> "$name · 하차 · 도착 때 결제" to Palette.sub
+            CatMeterSession.AlightStatus.DONE -> {
+                val c = alight.charge
+                if (c?.status == BoardingClient.Charge.Status.PAID) "$name · 하차 · ${formatNyang(c.amount)}원 결제됨" to Palette.ok
+                else "$name · 하차" to Palette.sub
+            }
+        }
+        name in state.alightPending -> "$name · 내리는 중?" to Palette.warn
+        name in state.midJoins -> "$name · 중간 탑승" to Palette.accent
+        else -> name to Palette.accent
+    }
+    Chip(text, color)
 }
 
 @Composable
