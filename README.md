@@ -55,11 +55,51 @@
 
 ## 실행
 
+### 한 번에 실행 (에뮬레이터 + Virtual Console)
+
+```bash
+./scripts/run-emulator.sh            # 에뮬레이터 켜기 → 부팅 대기 → Virtual Console 브라우저로 열기
+./scripts/run-emulator.sh --install  # 위에 더해 앱 빌드·설치까지
+```
+
+스크립트가 하는 일:
+1. AVD `Pleos_Connect_v2.1.0`을 **Cold boot**(`-no-snapshot-load`)로 켭니다. Quick boot로 켜면 VHAL을 쓸 수 없습니다. 이미 켜진 에뮬레이터가 있으면 그것을 씁니다.
+2. 부팅이 끝날 때까지 기다립니다 (`sys.boot_completed`, 최대 5분).
+3. `--install`을 주면 Android Studio 내장 JBR로 `./gradlew installDebug`를 실행합니다.
+4. `adb forward tcp:8088 tcp:8088`으로 포트를 연결하고, 응답이 오면 `http://127.0.0.1:8088/`(Virtual Console)을 기본 브라우저로 엽니다.
+
+바꿀 수 있는 값: `AVD_NAME`(에뮬레이터 이름), `ANDROID_HOME`(SDK 경로, 기본 `~/Library/Android/sdk`), `JAVA_HOME`.
+예: `AVD_NAME=Pleos_Chabak_Test ./scripts/run-emulator.sh`. 에뮬레이터 로그는 `$TMPDIR/catmeter-emulator.log`에 남습니다.
+
+같은 일을 손으로 할 때:
+
+```bash
+~/Library/Android/sdk/emulator/emulator -avd Pleos_Connect_v2.1.0 -no-snapshot-load &   # 에뮬레이터 (Cold boot)
+adb wait-for-device                                                                       # 부팅 기다리기
+adb forward tcp:8088 tcp:8088                                                             # Virtual Console 포트 연결
+open http://127.0.0.1:8088/                                                               # Virtual Console 열기
+```
+
+Virtual Console이 열리지 않으면 `adb devices`로 에뮬레이터가 보이는지 확인하고, `adb forward tcp:8088 tcp:8088`을 다시 실행합니다.
+PC에서 8088 포트를 다른 프로그램이 쓰고 있지 않은지도 확인합니다. (근거: Pleos 문서 [Virtual Console Setup Guide](https://document.pleos.ai/en/docs/connect/guide/getting-started/application-development/use-vehicle-emulator), [Configuring Emulator](https://document.pleos.ai/en/docs/connect/guide/getting-started/application-development/configure-pleos-connect-emulator))
+
+### Android Studio로 실행
+
 1. Android Studio로 이 저장소를 엽니다. JDK는 Android Studio에 내장된 JBR을 씁니다.
-2. **Pleos Connect 에뮬레이터**(system-image `android-34/pleos_car_emulator`)를 실행합니다.
+2. **Pleos Connect 에뮬레이터**(system-image `android-34/pleos_car_emulator`)를 실행합니다. AVD 설정에서 Boot option을 **Cold boot**로 둡니다.
 3. `./gradlew installDebug`를 실행합니다. 터미널에서 빌드하려면 `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`을 지정합니다.
-4. 주행 값(속도·기어·누적 거리)은 **Pleos Connect Virtual Console**에서 넣습니다. 이 에뮬레이터는 user 빌드라 `adb shell cmd car_service inject-vhal-event`를 쓸 수 없습니다.
+4. 주행 값(기어·누적 거리·좌석 점유 등)은 **Pleos Connect Virtual Console**(위 스크립트, 또는 `adb forward tcp:8088 tcp:8088` 후 `http://127.0.0.1:8088/`)에서 넣습니다. 이 에뮬레이터는 user 빌드라 `adb shell cmd car_service inject-vhal-event`를 쓸 수 없습니다.
 5. 분할 화면은 화면 오른쪽 끝의 `⋮` 핸들을 왼쪽으로 끌어서 엽니다.
+
+### Virtual Console에서 넣을 수 있는 값 (Pleos 문서 기준)
+
+| 영역 | 카드 | 이 앱에서 쓰는 곳 |
+|---|---|---|
+| Motion | Gear Selection (P·R·N·D), Odometer (0 ~ 1,000,000 km) | 도착 확인(P단), 누적 거리 |
+| Convenience | Seat Occupancy (운전석·조수석·뒷좌석 좌우, Empty / Occupied) | 좌석 점유 (탑승 확인에 연결 예정) |
+| Safety | Telltales (안전벨트 경고등 등 Off / On / Blink) | 안전벨트 **착용 여부가 아니라 경고등**만 바꿀 수 있습니다 |
+
+차속을 넣는 카드는 문서 표에 없습니다. 차속을 어떻게 바꾸는지는 Virtual Console을 열어 확인해야 합니다.
 
 단위 테스트: `./gradlew testDebugUnitTest`
 

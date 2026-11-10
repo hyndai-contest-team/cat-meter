@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.InputChip
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +54,13 @@ import java.time.ZoneId
 /** 출발 전: 오늘의 고양이 꾸미기 + 함께 타는 사람 이름. 정차(주행 제한 해제) 중에만 편집할 수 있다. */
 @Composable
 fun SetupScreen(session: CatMeterSession, state: CatMeterSession.State, car: CarView, wide: Boolean) {
+    var showBoardingQr by rememberSaveable { mutableStateOf(false) }
+    if (showBoardingQr) {
+        BoardingQrScreen(state, car, wide, onClose = { showBoardingQr = false })
+        return
+    }
+    val openBoardingQr = { showBoardingQr = true }
+
     val preview = @Composable { mod: Modifier ->
         Column(mod, horizontalAlignment = Alignment.CenterHorizontally) {
             Cat3D(state.cat, Modifier.fillMaxWidth().weight(1f), pose = CatPose.GREET)
@@ -69,7 +78,7 @@ fun SetupScreen(session: CatMeterSession, state: CatMeterSession.State, car: Car
         Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             preview(Modifier.weight(1f).fillMaxHeight())
             Column(Modifier.weight(1.1f).fillMaxHeight()) {
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { SetupFields(session, state, car) }
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { SetupFields(session, state, car, openBoardingQr) }
                 StartBar(session, state, car)
             }
         }
@@ -78,7 +87,7 @@ fun SetupScreen(session: CatMeterSession, state: CatMeterSession.State, car: Car
         Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 preview(Modifier.fillMaxWidth().height(260.dp))
-                SetupFields(session, state, car)
+                SetupFields(session, state, car, openBoardingQr)
                 Spacer(Modifier.height(8.dp))
             }
             StartBar(session, state, car)
@@ -88,7 +97,7 @@ fun SetupScreen(session: CatMeterSession, state: CatMeterSession.State, car: Car
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SetupFields(session: CatMeterSession, state: CatMeterSession.State, car: CarView) {
+private fun SetupFields(session: CatMeterSession, state: CatMeterSession.State, car: CarView, onShowBoardingQr: () -> Unit) {
     val locked = car.restricted
     run {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -138,6 +147,14 @@ private fun SetupFields(session: CatMeterSession, state: CatMeterSession.State, 
             }
 
             Section("함께 타는 사람") {
+                OutlinedButton(
+                    onClick = onShowBoardingQr,
+                    enabled = !locked,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) {
+                    Text("탑승 QR 띄우기", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                }
+                Text("또는 이름을 직접 넣어 주세요", color = Palette.sub, fontSize = 13.sp)
                 PassengerEditor(session, state.passengers, locked)
             }
         }
