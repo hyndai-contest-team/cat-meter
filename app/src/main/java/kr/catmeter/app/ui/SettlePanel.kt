@@ -48,8 +48,9 @@ fun SettlePanel(session: CatMeterSession, record: TripRecord, autoPay: CatMeterS
             Chip("테스트 · 실제 출금 없음", Palette.warn)
         }
         val perPerson = record.bill.perPassenger(record.passengers.size)
-        if (perPerson != null) {
-            Text("1인당 ${formatNyang(perPerson)}원 (1냥 = 1원)", color = Palette.sub, fontSize = 14.sp)
+        when {
+            record.joins.isNotEmpty() -> Text("중간에 탄 사람은 탄 뒤 구간만 나눠 내요 (1냥 = 1원)", color = Palette.sub, fontSize = 14.sp)
+            perPerson != null -> Text("1인당 ${formatNyang(perPerson)}원 (1냥 = 1원)", color = Palette.sub, fontSize = 14.sp)
         }
 
         when (autoPay) {
@@ -77,9 +78,9 @@ fun SettlePanel(session: CatMeterSession, record: TripRecord, autoPay: CatMeterS
 private fun ChargeRow(charge: BoardingClient.Charge) {
     val (text, color) = when (charge.status) {
         BoardingClient.Charge.Status.PAID -> "${formatNyang(charge.amount)}원 · ${charge.methodLabel ?: "결제 수단"} 결제됨" to Palette.ok
-        BoardingClient.Charge.Status.NO_METHOD -> "결제 수단 미등록 · 직접 받아 주세요" to Palette.warn
+        BoardingClient.Charge.Status.NO_METHOD -> "${formatNyang(charge.amount)}원 · 결제 수단 미등록 · 직접 받아 주세요" to Palette.warn
         BoardingClient.Charge.Status.NOT_COMMUTING -> "출퇴근 길 아님 · 결제 없이 냥만" to Palette.sub
-        BoardingClient.Charge.Status.NOT_BOARDED -> "QR로 타지 않음 · 직접 받아 주세요" to Palette.warn
+        BoardingClient.Charge.Status.NOT_BOARDED -> "${formatNyang(charge.amount)}원 · QR로 타지 않음 · 직접 받아 주세요" to Palette.warn
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(charge.name, fontSize = 16.sp, fontWeight = FontWeight.Bold)

@@ -40,7 +40,15 @@ import kr.catmeter.app.trip.Boarding
  * (QR 화면은 차가 서 있을 때만 띄운다는 Pleos 주의분산 원칙과 팀 결제 설계 문서의 규칙).
  */
 @Composable
-fun BoardingQrScreen(session: CatMeterSession, state: CatMeterSession.State, car: CarView, wide: Boolean, onClose: () -> Unit) {
+fun BoardingQrScreen(
+    session: CatMeterSession,
+    state: CatMeterSession.State,
+    car: CarView,
+    wide: Boolean,
+    onClose: () -> Unit,
+    /** 이동 중 정차해서 띄운 QR. 중간에 탄 사람은 탄 뒤 구간만 나눠 낸다. */
+    midTrip: Boolean = false,
+) {
     // 화면이 떠 있는 동안만 서버에서 탑승자를 받아 온다
     DisposableEffect(state.boardingCode) {
         session.openBoarding()
@@ -52,8 +60,12 @@ fun BoardingQrScreen(session: CatMeterSession, state: CatMeterSession.State, car
     val info = @Composable { BoardingInfo(state.passengers, state.riders) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("탑승 QR", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("함께 탈 사람은 출발 전에 휴대폰으로 찍어 주세요", color = Palette.sub, fontSize = 15.sp)
+        Text(if (midTrip) "중간 탑승 QR" else "탑승 QR", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text(
+            if (midTrip) "지금 타는 분은 휴대폰으로 찍어 주세요 · 탄 뒤 구간만 나눠 내요"
+            else "함께 탈 사람은 출발 전에 휴대폰으로 찍어 주세요",
+            color = Palette.sub, fontSize = 15.sp,
+        )
 
         if (wide) {
             Row(

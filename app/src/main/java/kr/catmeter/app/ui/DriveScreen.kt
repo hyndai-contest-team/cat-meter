@@ -18,6 +18,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +44,14 @@ import kr.catmeter.app.trip.TripTracker
 @Composable
 fun DriveScreen(session: CatMeterSession, state: CatMeterSession.State, car: CarView, wide: Boolean) {
     val live = state.live ?: return
+    // 중간 탑승 QR: 주행 제한이 풀린 정차 중에만 띄운다. 차가 움직이면 바로 닫는다.
+    var showBoardingQr by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(car.restricted) { if (car.restricted) showBoardingQr = false }
+    if (showBoardingQr && !car.restricted) {
+        BoardingQrScreen(session, state, car, wide, onClose = { showBoardingQr = false }, midTrip = true)
+        return
+    }
+    val openBoardingQr = { showBoardingQr = true }
     val showCat = !live.isMoving
     val bill = TripBill.of(live.distanceKm, live.elapsedMs, state.energy)
     val canFinish = !car.restricted && !live.isMoving
@@ -57,9 +70,9 @@ fun DriveScreen(session: CatMeterSession, state: CatMeterSession.State, car: Car
             if (showCat) catPanel(Modifier.weight(1.2f).fillMaxHeight())
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 NyangMeter(bill, live, car, state.autoStarted, totalSize = 56.sp, valueSize = 32.sp)
-                Details(live, state.passengers)
+                Details(live, state.passengers, state.midJoins.keys)
                 Spacer(Modifier.weight(1f))
-                ArrivalControls(session, state, canFinish)
+                ArrivalControls(session, state, canFinish, openBoardingQr)
             }
         }
     } else {
@@ -67,7 +80,7 @@ fun DriveScreen(session: CatMeterSession, state: CatMeterSession.State, car: Car
             if (showCat) catPanel(Modifier.fillMaxWidth().weight(1f)) else Spacer(Modifier.weight(1f))
             NyangMeter(bill, live, car, state.autoStarted, totalSize = 48.sp, valueSize = 24.sp)
             if (!showCat) Spacer(Modifier.weight(1f))
-            ArrivalControls(session, state, canFinish)
+            ArrivalControls(session, state, canFinish, openBoardingQr)
         }
     }
 }
@@ -128,7 +141,7 @@ private fun NyangValue(nyang: Int, size: TextUnit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Details(live: TripTracker.Snapshot, passengers: List<String>) {
+private fun Details(live: TripTracker.Snapshot, passengers: List<String>, midJoined: Set<String>) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -145,7 +158,7 @@ private fun Details(live: TripTracker.Snapshot, passengers: List<String>) {
             Spacer(Modifier.height(4.dp))
             Text("함께 타는 중", color = Palette.sub, fontSize = 14.sp)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                passengers.forEach { Chip(it, Palette.accent) }
+                passengers.forEach { Chip(if (it in midJoined) "$it · 중간 탑승" else it, Palette.accent) }
             }
         }
     }
@@ -160,8 +173,13 @@ private fun DetailRow(label: String, value: String) {
 }
 
 @Composable
-private fun ArrivalControls(session: CatMeterSession, state: CatMeterSession.State, canFinish: Boolean) {
+private fun ArrivalControls(session: CatMeterSession, state: CatMeterSession.State, canFinish: Boolean, onShowBoardingQr: () -> Unit) {
     if (!canFinish) return
+    if (state.passengers.size < CatMeterSession.MAX_PASSENGERS) {
+        OutlinedButton(onClick = onShowBoardingQr, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Text("중간 탑승 QR", fontSize = 17.sp)
+        }
+    }
     if (state.arrivalSuggested) {
         Column(
             Modifier

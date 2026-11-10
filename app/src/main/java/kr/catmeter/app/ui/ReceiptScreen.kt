@@ -158,7 +158,12 @@ private fun ReceiptCard(record: TripRecord, layer: GraphicsLayer) {
             Text("${formatNyang(bill.totalNyang)}", color = Palette.paperInk, fontSize = 34.sp, fontWeight = FontWeight.Bold, fontFamily = mono)
             Text(" 냥", color = Palette.paperSub, fontSize = 17.sp, modifier = Modifier.padding(bottom = 5.dp))
         }
-        bill.perPassenger(record.passengers.size)?.let { BigLine("1인당", "${formatNyang(it)}냥") }
+        if (record.joins.isEmpty()) {
+            bill.perPassenger(record.passengers.size)?.let { BigLine("1인당", "${formatNyang(it)}냥") }
+        } else {
+            val amounts = record.shares.values
+            BigLine("나눠 낼 금액", "${formatNyang(amounts.min())}~${formatNyang(amounts.max())}냥")
+        }
         Text(
             when {
                 record.settledAtMs != null -> "${record.commute.window?.label} 함께 타기 · 자동결제 완료(테스트)"
@@ -170,7 +175,10 @@ private fun ReceiptCard(record: TripRecord, layer: GraphicsLayer) {
         if (record.passengers.isNotEmpty()) {
             Dashed()
             Text("함께 탄 집사들", color = Palette.paperSub, fontSize = 14.sp)
-            Text(record.passengers.joinToString("  "), color = Palette.paperInk, fontSize = 19.sp, textAlign = TextAlign.Center)
+            Text(
+                record.passengers.joinToString("  ") { if (it in record.joins) "$it(중간)" else it },
+                color = Palette.paperInk, fontSize = 19.sp, textAlign = TextAlign.Center,
+            )
         }
         Dashed()
         Text("CAT METER · 고양 미터기", color = Palette.paperSub, fontSize = 11.sp, fontFamily = mono)
