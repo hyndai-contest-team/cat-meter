@@ -49,7 +49,8 @@ fun SettlePanel(session: CatMeterSession, record: TripRecord, autoPay: CatMeterS
         }
         val perPerson = record.bill.perPassenger(record.passengers.size)
         when {
-            record.joins.isNotEmpty() -> Text("중간에 탄 사람은 탄 뒤 구간만 나눠 내요 (1냥 = 1원)", color = Palette.sub, fontSize = 14.sp)
+            record.joins.isNotEmpty() || record.leaves.isNotEmpty() ->
+                Text("각자 탄 구간만큼 나눠 내요. 먼저 내린 사람은 내릴 때 결제했어요 (1냥 = 1원)", color = Palette.sub, fontSize = 14.sp)
             perPerson != null -> Text("1인당 ${formatNyang(perPerson)}원 (1냥 = 1원)", color = Palette.sub, fontSize = 14.sp)
         }
 

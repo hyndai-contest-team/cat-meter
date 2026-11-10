@@ -60,7 +60,12 @@ fun BoardingQrScreen(
     val qr = @Composable { size: Dp ->
         QrBlock(state.boardingCode, state.boardingLink, car.restricted, size, seat, onRetry = session::openBoarding)
     }
-    val info = @Composable { BoardingInfo(state.passengers, state.riders) }
+    val info = @Composable {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            BoardingInfo(state.passengers, state.riders)
+            if (seat == null) WaitingSeats(state, onPrompt = session::promptSeat)
+        }
+    }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text(
@@ -188,6 +193,23 @@ private fun BoardingInfo(passengers: List<String>, riders: List<BoardingClient.R
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** 앉았지만 아직 탑승 등록하지 않은 자리. 운전자가 '나중에'로 넘긴 자리의 QR 을 다시 띄울 수 있다. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WaitingSeats(state: CatMeterSession.State, onPrompt: (SeatPosition) -> Unit) {
+    val assigned = state.riders.mapNotNull { it.seat }.toSet()
+    val waiting = state.seats.filter { (seat, signal) -> signal.taken && !seat.isDriver && seat !in assigned }.keys.sorted()
+    if (waiting.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("앉았지만 아직 등록하지 않은 자리", color = Palette.sub, fontSize = 14.sp)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            waiting.forEach { seat ->
+                OutlinedButton(onClick = { onPrompt(seat) }) { Text("${seat.label} QR", fontSize = 15.sp) }
             }
         }
     }

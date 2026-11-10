@@ -129,6 +129,13 @@
     <p class="lead" id="done-lead"></p>
   </section>
 
+  <section class="card" id="alight" hidden>
+    <h2>하차 처리됐어요</h2>
+    <p class="muted">곧 탄 구간만큼 자동결제돼요. 아직 차에 타고 있다면 눌러 주세요.</p>
+    <button id="stay" type="button">아직 타고 있어요</button>
+    <p class="error" id="stay-error" role="alert"></p>
+  </section>
+
   <section class="card" id="receipt" hidden>
     <h2 id="receipt-title">결제 정보</h2>
     <div class="row"><span>결제 수단</span><span id="receipt-method">-</span></div>
@@ -213,14 +220,15 @@
     $('receipt').hidden = !me.commuting;
     $('receipt-method').textContent = me.payment ? me.payment.label : '-';
     const paid = me.charge && me.charge.status === 'paid';
+    $('alight').hidden = !(me.commuting && me.alighted && !me.charge);
     $('receipt-paid').hidden = !paid;
     $('receipt-wait').hidden = paid;
     $('receipt-title').textContent = paid ? '결제 영수증' : '결제 정보';
     if (paid) {
       $('receipt-amount').textContent = me.charge.amount.toLocaleString('ko-KR');
       stopPolling();
-    } else if (me.commuting && me.payment) {
-      startPolling();
+    } else if (me.commuting) {
+      startPolling();   // 하차 안내와 결제 결과를 기다린다
     }
   }
 
@@ -314,6 +322,21 @@
     }
   });
   $('move-skip').addEventListener('click', () => { moveDismissed = true; renderMe(); });
+
+  $('stay').addEventListener('click', async () => {
+    $('stay').disabled = true;
+    $('stay-error').textContent = '';
+    try {
+      const res = await request(`/passengers/${me.id}/stay`, { method: 'POST' });
+      if (!res.ok) { $('stay-error').textContent = res.body.message || '처리하지 못했어요.'; return; }
+      me = res.body.passenger;
+      renderMe();
+    } catch {
+      $('stay-error').textContent = '서버에 연결할 수 없어요. 잠시 뒤 다시 눌러 주세요.';
+    } finally {
+      $('stay').disabled = false;
+    }
+  });
 
   $('methods').addEventListener('click', async (e) => {
     const button = e.target.closest('button[data-method]');
