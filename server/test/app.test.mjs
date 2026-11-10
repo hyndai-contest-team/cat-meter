@@ -235,6 +235,31 @@ test('하차: 먼저 내린 사람만 결제한 뒤, 도착 때 남은 사람을
   });
 });
 
+test('자리 고르기: 차량이 알린 앉은 자리 중 아무도 고르지 않은 자리만 고를 수 있다', async () => {
+  await withServer(async (call) => {
+    const { token } = await openAndJoin(call);
+    assert.equal((await call('GET', `/api/rides/${CODE}`)).json.seats, null, '좌석 정보를 받기 전에는 null');
+    assert.equal((await call('PUT', `/api/rides/${CODE}/seats`, { seats: [{ seat: 'ROW_1_RIGHT', occupied: true }] })).status, 403);
+    assert.equal((await call('PUT', `/api/rides/${CODE}/seats`, { seats: [{ seat: 'ROW_1_LEFT', occupied: true }] }, token)).status, 400, '운전석은 안 된다');
+
+    const seats = [
+      { seat: 'ROW_1_RIGHT', occupied: true }, { seat: 'ROW_2_LEFT', occupied: true }, { seat: 'ROW_2_RIGHT', occupied: false },
+    ];
+    assert.equal((await call('PUT', `/api/rides/${CODE}/seats`, { seats }, token)).status, 200);
+
+    const empty = await call('POST', `/api/rides/${CODE}/passengers`, { name: '빈자리', seat: 'ROW_2_RIGHT', picked: true });
+    assert.equal(empty.json.error, 'seat_not_occupied');
+    assert.equal((await call('POST', `/api/rides/${CODE}/passengers`, { name: '민수', seat: 'ROW_1_RIGHT', picked: true })).status, 201);
+    const taken = await call('POST', `/api/rides/${CODE}/passengers`, { name: '하늘', seat: 'ROW_1_RIGHT', picked: true });
+    assert.equal(taken.json.error, 'seat_taken');
+
+    const ride = await call('GET', `/api/rides/${CODE}`);
+    assert.deepEqual(ride.json.seats.map((s) => [s.seat, s.occupied, s.takenBy]), [
+      ['ROW_1_RIGHT', true, '민수'], ['ROW_2_LEFT', true, null], ['ROW_2_RIGHT', false, null],
+    ]);
+  });
+});
+
 test('탑승 등록 페이지와 상태 확인', async () => {
   await withServer(async (call) => {
     const page = await call('GET', `/ride/${CODE}`);

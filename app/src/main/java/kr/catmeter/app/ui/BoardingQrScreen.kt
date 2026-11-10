@@ -62,7 +62,7 @@ fun BoardingQrScreen(
     }
     val info = @Composable {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            BoardingInfo(state.passengers, state.riders)
+            BoardingInfo(state.passengers, state.riders, pickSeat = seat == null && state.seats.isNotEmpty())
             if (seat == null) WaitingSeats(state, onPrompt = session::promptSeat)
         }
     }
@@ -80,6 +80,7 @@ fun BoardingQrScreen(
             when {
                 seat != null -> "${seat.label}에 앉은 분은 휴대폰으로 찍어 주세요" + if (midTrip) " · 탄 뒤 구간만 나눠 내요" else ""
                 midTrip -> "지금 타는 분은 휴대폰으로 찍어 주세요 · 탄 뒤 구간만 나눠 내요"
+                state.seats.isNotEmpty() -> "함께 탄 분은 모두 휴대폰으로 찍고, 앉은 자리를 골라 주세요"
                 else -> "함께 탈 사람은 출발 전에 휴대폰으로 찍어 주세요"
             },
             color = Palette.sub, fontSize = 15.sp,
@@ -161,11 +162,11 @@ private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BoardingInfo(passengers: List<String>, riders: List<BoardingClient.Rider>) {
+private fun BoardingInfo(passengers: List<String>, riders: List<BoardingClient.Rider>, pickSeat: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Step("1", "휴대폰 카메라로 QR을 찍어요")
-            Step("2", "열린 화면에서 이름을 넣으면 탑승 완료")
+            Step("2", if (pickSeat) "앉은 자리를 고르고 이름을 넣으면 탑승 완료" else "열린 화면에서 이름을 넣으면 탑승 완료")
             Step("3", "결제 수단을 한 번 등록하면 내릴 때 자동결제")
             Text("테스트 결제 · 실제 출금 없음", color = Palette.warn, fontSize = 13.sp)
         }

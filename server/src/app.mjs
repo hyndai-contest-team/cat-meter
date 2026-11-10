@@ -2,12 +2,13 @@
 //
 // 차량 앱
 //   PUT  /api/rides/:code                         탑승 QR 을 띄울 때 이동을 연다 → 휴대폰 주소(joinUrl), 차량 전용 토큰(ownerToken)
-//   GET  /api/rides/:code                         탑승자 목록 (이름, 출퇴근 여부, 결제 수단 이름, 결제 결과)
+//   GET  /api/rides/:code                         탑승자 목록 (이름, 출퇴근 여부, 결제 수단 이름, 결제 결과)과 좌석 상태
+//   PUT  /api/rides/:code/seats                   좌석 센서로 본 동승석 상태 (앉은 자리만 휴대폰에서 고를 수 있게). Authorization: Bearer <ownerToken>
 //   POST /api/rides/:code/alights                 하차 판단 (좌석이 빔). Authorization: Bearer <ownerToken>
 //   POST /api/rides/:code/charges                 사람별 금액 자동결제 (테스트). 먼저 내린 사람은 내릴 때, 남은 사람은 도착 때. Authorization: Bearer <ownerToken>
 // 승객 휴대폰
 //   GET  /ride/:code                              탑승 등록 페이지
-//   POST /api/rides/:code/passengers              이름·출퇴근 여부를 넣어 탑승 → 내 탑승 번호(id)
+//   POST /api/rides/:code/passengers              이름·출퇴근 여부(·자리)를 넣어 탑승 → 내 탑승 번호(id)
 //   POST /api/rides/:code/passengers/:id/payment  테스트 결제 수단 등록
 //   POST /api/rides/:code/passengers/:id/seat     자리 이동 (같은 휴대폰이 다른 좌석 QR 을 찍었을 때)
 //   POST /api/rides/:code/passengers/:id/stay     하차로 잘못 판단됐을 때 '아직 타고 있어요' (결제 전에만)
@@ -27,7 +28,7 @@ const RIDE_PAGE = new URL('../public/ride.html', import.meta.url);
 const ERROR_STATUS = {
   not_found: 404, invalid_name: 400, duplicate: 409, full: 409,
   forbidden: 403, invalid_method: 400, invalid_charge: 400, not_commuting: 409, invalid_seat: 400,
-  not_alighted: 409, already_charged: 409,
+  not_alighted: 409, already_charged: 409, seat_not_occupied: 409, seat_taken: 409,
 };
 
 /**
@@ -81,7 +82,7 @@ export function createHandler({ store, publicUrl }) {
         // 승객: 탑승
         if (rest.length === 1 && rest[0] === 'passengers' && req.method === 'POST') {
           const body = await readJson(req);
-          const passenger = store.addPassenger(code, body.name, body.commuting === true, body.seat ?? null);
+          const passenger = store.addPassenger(code, body.name, body.commuting === true, body.seat ?? null, body.picked === true);
           return sendJson(res, 201, { passenger: passengerView(passenger), ride: rideView(store.getRide(code)) });
         }
 
@@ -102,6 +103,13 @@ export function createHandler({ store, publicUrl }) {
             const body = await readJson(req);
             return sendJson(res, 200, { passenger: passengerView(store.moveSeat(code, id, body.seat ?? null)), ride: rideView(store.getRide(code)) });
           }
+        }
+
+        // 차량: 좌석 상태
+        if (rest.length === 1 && rest[0] === 'seats' && req.method === 'PUT') {
+          const body = await readJson(req);
+          store.setSeats(code, bearer(req), body.seats);
+          return sendJson(res, 200, rideView(store.getRide(code)));
         }
 
         // 차량: 하차 판단
@@ -144,6 +152,8 @@ function rideView(ride) {
       paymentLabel: p.payment?.label ?? null,
       chargeStatus: p.charge?.status ?? null,
     })),
+    // 좌석 센서가 없으면 null. 고른 사람이 있으면 이름을 함께 보여 준다 (탑승자 목록에 이미 공개되는 정보)
+    seats: ride.seats?.map((s) => ({ ...s, takenBy: ride.passengers.find((p) => p.seat === s.seat)?.name ?? null })) ?? null,
   };
 }
 

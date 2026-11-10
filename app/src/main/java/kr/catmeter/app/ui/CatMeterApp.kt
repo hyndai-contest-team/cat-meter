@@ -94,14 +94,23 @@ fun CatMeterApp(session: CatMeterSession, onRequestSpeedPermission: () -> Unit) 
             Column(Modifier.fillMaxSize()) {
                 StatusStrip(car, compact = !wide, onRequestSpeedPermission)
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                    // 새로 앉은 자리가 있으면 차가 서 있을 때 그 자리 탑승 QR 을 먼저 띄운다 (도착 화면 제외)
-                    val promptSeat = state.seatPrompts.firstOrNull()
-                    if (promptSeat != null && !car.restricted && state.phase != CatMeterSession.Phase.ARRIVED) {
+                    // 새로 앉은 자리가 있으면 차가 서 있을 때 탑승 QR 을 먼저 띄운다 (도착 화면 제외).
+                    // 한 자리면 그 자리 QR, 여러 자리에 함께 앉았으면 휴대폰에서 자리를 고르는 QR 하나.
+                    val prompts = state.seatPrompts
+                    val showPrompt = prompts.isNotEmpty() && !car.restricted && state.phase != CatMeterSession.Phase.ARRIVED
+                    if (showPrompt && prompts.size == 1) {
+                        val seat = prompts.first()
                         BoardingQrScreen(
                             session, state, car, wide,
-                            onClose = { session.dismissSeatPrompt(promptSeat) },
+                            onClose = { session.dismissSeatPrompt(seat) },
                             midTrip = state.phase == CatMeterSession.Phase.DRIVING,
-                            seat = promptSeat,
+                            seat = seat,
+                        )
+                    } else if (showPrompt) {
+                        BoardingQrScreen(
+                            session, state, car, wide,
+                            onClose = session::dismissSeatPrompts,
+                            midTrip = state.phase == CatMeterSession.Phase.DRIVING,
                         )
                     } else when (state.phase) {
                         CatMeterSession.Phase.SETUP -> SetupScreen(session, state, car, wide)

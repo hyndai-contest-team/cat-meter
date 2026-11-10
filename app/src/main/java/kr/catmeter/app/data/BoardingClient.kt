@@ -60,6 +60,14 @@ class BoardingClient(private val baseUrl: String) {
         }
     }
 
+    /** 좌석 센서로 본 동승석 상태를 알린다. 휴대폰 자리 고르기에서 사람이 앉은 자리만 누를 수 있게 된다. */
+    suspend fun putSeats(code: String, ownerToken: String, occupied: Map<SeatPosition, Boolean>) = withContext(Dispatchers.IO) {
+        val seats = JSONArray()
+        occupied.forEach { (seat, on) -> seats.put(JSONObject().put("seat", seat.name).put("occupied", on)) }
+        request("PUT", "/api/rides/$code/seats", JSONObject().put("seats", seats).toString(), ownerToken)
+        Unit
+    }
+
     /** 하차 판단을 서버에 알린다. 승객 휴대폰에 '하차 처리됐어요'가 뜬다. */
     suspend fun alight(code: String, ownerToken: String, name: String) = withContext(Dispatchers.IO) {
         request("POST", "/api/rides/$code/alights", JSONObject().put("name", name).toString(), ownerToken)

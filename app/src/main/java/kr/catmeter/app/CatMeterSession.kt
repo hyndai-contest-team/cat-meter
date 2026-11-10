@@ -154,6 +154,8 @@ class CatMeterSession(context: Context) {
     /** 탑승자 목록을 받아 오는 일. QR 화면이 떠 있거나 이동 중이면 계속한다 (하차 취소·중간 탑승을 받기 위해). */
     private var pollJob: Job? = null
     private var qrOpen = false
+    /** 서버에 마지막으로 알린 좌석 상태 (바뀔 때만 다시 보낸다) */
+    private var sentSeats: Map<SeatPosition, Boolean>? = null
     private val alightTracker = AlightTracker()
 
     /**
@@ -297,6 +299,7 @@ class CatMeterSession(context: Context) {
             while (isActive && (qrOpen || _state.value.phase == Phase.DRIVING)) {
                 val fetchedAt = now()
                 try {
+                    syncSeats(code)
                     applyRiders(boardingClient.riders(code), fetchedAt)
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
@@ -305,6 +308,15 @@ class CatMeterSession(context: Context) {
                 delay(BOARDING_POLL_MS)
             }
         }
+    }
+
+    /** 좌석 상태가 바뀌었으면 서버에 알린다 (운전석 제외, 차량이 지원하는 자리만) */
+    private suspend fun syncSeats(code: String) {
+        val token = boardingToken ?: return
+        val seats = _state.value.seats.filterKeys { !it.isDriver }.mapValues { it.value.taken }
+        if (seats.isEmpty() || seats == sentSeats) return
+        boardingClient.putSeats(code, token, seats)
+        sentSeats = seats
     }
 
     private fun applyRiders(riders: List<BoardingClient.Rider>, fetchedAt: Long) {
@@ -329,6 +341,9 @@ class CatMeterSession(context: Context) {
 
     /** 운전자가 좌석 탑승 QR 에서 '나중에'를 눌렀을 때. 그 자리가 비었다가 다시 앉을 때까지 다시 띄우지 않는다. */
     fun dismissSeatPrompt(seat: SeatPosition) = _state.update { it.copy(seatPrompts = it.seatPrompts - seat) }
+
+    /** 여러 자리를 한꺼번에 띄운 자리 고르기 QR 을 닫을 때 */
+    fun dismissSeatPrompts() = _state.update { it.copy(seatPrompts = emptyList()) }
 
     private fun State.assignedSeats(): Set<SeatPosition> = riders.mapNotNull(BoardingClient.Rider::seat).toSet()
 
@@ -573,6 +588,7 @@ class CatMeterSession(context: Context) {
         closeBoarding()
         pollJob?.cancel()
         pollJob = null
+        sentSeats = null
         boardedNames.clear()
         boardingToken = null
         _state.update {
