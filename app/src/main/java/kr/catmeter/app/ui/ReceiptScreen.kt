@@ -158,7 +158,7 @@ private fun ReceiptCard(record: TripRecord, layer: GraphicsLayer) {
             Text("${formatNyang(bill.totalNyang)}", color = Palette.paperInk, fontSize = 34.sp, fontWeight = FontWeight.Bold, fontFamily = mono)
             Text(" 냥", color = Palette.paperSub, fontSize = 17.sp, modifier = Modifier.padding(bottom = 5.dp))
         }
-        if (record.joins.isEmpty()) {
+        if (record.joins.isEmpty() && record.leaves.isEmpty()) {
             bill.perPassenger(record.passengers.size)?.let { BigLine("1인당", "${formatNyang(it)}냥") }
         } else {
             val amounts = record.shares.values
@@ -176,7 +176,10 @@ private fun ReceiptCard(record: TripRecord, layer: GraphicsLayer) {
             Dashed()
             Text("함께 탄 집사들", color = Palette.paperSub, fontSize = 14.sp)
             Text(
-                record.passengers.joinToString("  ") { if (it in record.joins) "$it(중간)" else it },
+                record.passengers.joinToString("  ") { name ->
+                    val tags = listOfNotNull("중간 탑승".takeIf { name in record.joins }, "먼저 내림".takeIf { name in record.leaves })
+                    if (tags.isEmpty()) name else "$name(${tags.joinToString("·")})"
+                },
                 color = Palette.paperInk, fontSize = 19.sp, textAlign = TextAlign.Center,
             )
         }

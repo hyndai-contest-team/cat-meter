@@ -87,9 +87,8 @@ class CatMeterStore(context: Context) {
             .put("window", t.commute.window?.name)
             .put("reasons", JSONArray(t.commute.reasons)))
         .put("settledAt", t.settledAtMs)
-        .put("joins", JSONObject().apply {
-            t.joins.forEach { (name, p) -> put(name, JSONObject().put("km", p.distanceKm.toDouble()).put("ms", p.elapsedMs)) }
-        })
+        .put("joins", pointsJson(t.joins))
+        .put("leaves", pointsJson(t.leaves))
 
     private fun tripFrom(o: JSONObject) = TripRecord(
         id = o.getLong("id"),
@@ -125,12 +124,19 @@ class CatMeterStore(context: Context) {
             )
         } ?: CommuteCheck(false, null, emptyList()),
         settledAtMs = if (o.has("settledAt") && !o.isNull("settledAt")) o.getLong("settledAt") else null,
-        joins = o.optJSONObject("joins")?.let { j ->
-            j.keys().asSequence().mapNotNull { name ->
-                j.optJSONObject(name)?.let { p -> name to JoinPoint(p.optDouble("km").toFloat(), p.optLong("ms")) }
-            }.toMap()
-        } ?: emptyMap(),
+        joins = pointsFrom(o.optJSONObject("joins")),
+        leaves = pointsFrom(o.optJSONObject("leaves")),
     )
+
+    private fun pointsJson(points: Map<String, JoinPoint>) = JSONObject().apply {
+        points.forEach { (name, p) -> put(name, JSONObject().put("km", p.distanceKm.toDouble()).put("ms", p.elapsedMs)) }
+    }
+
+    private fun pointsFrom(o: JSONObject?): Map<String, JoinPoint> = o?.let { j ->
+        j.keys().asSequence().mapNotNull { name ->
+            j.optJSONObject(name)?.let { p -> name to JoinPoint(p.optDouble("km").toFloat(), p.optLong("ms")) }
+        }.toMap()
+    } ?: emptyMap()
 
     private fun pointJson(p: GeoPoint) = JSONObject().put("lat", p.lat).put("lon", p.lon)
     private fun pointFrom(o: JSONObject) = GeoPoint(o.getDouble("lat"), o.getDouble("lon"))

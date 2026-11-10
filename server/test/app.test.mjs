@@ -201,6 +201,40 @@ test('좌석: 이미 누가 있는 자리에 새 사람이 타면 앞사람은 �
   });
 });
 
+test('하차: 차량이 하차를 알리면 승객에게 보이고, 결제 전이면 승객이 취소할 수 있다', async () => {
+  await withServer(async (call) => {
+    const { token, ids } = await openAndJoin(call, [{ name: '민수', commuting: true, method: 'card' }]);
+    assert.equal((await call('POST', `/api/rides/${CODE}/alights`, { name: '민수' })).status, 403, '차량 토큰 필요');
+    assert.equal((await call('POST', `/api/rides/${CODE}/passengers/${ids['민수']}/stay`)).status, 409, '하차 전에는 취소할 것이 없다');
+
+    const alighted = await call('POST', `/api/rides/${CODE}/alights`, { name: '민수' }, token);
+    assert.equal(alighted.json.passengers[0].alighted, true);
+    assert.equal((await call('GET', `/api/rides/${CODE}/passengers/${ids['민수']}`)).json.passenger.alighted, true);
+
+    const stayed = await call('POST', `/api/rides/${CODE}/passengers/${ids['민수']}/stay`);
+    assert.equal(stayed.status, 200);
+    assert.equal(stayed.json.passenger.alighted, false);
+    assert.equal((await call('POST', `/api/rides/${CODE}/alights`, { name: '없음' }, token)).status, 404);
+  });
+});
+
+test('하차: 먼저 내린 사람만 결제한 뒤, 도착 때 남은 사람을 결제해도 먼저 결제한 사람은 다시 결제하지 않는다', async () => {
+  await withServer(async (call) => {
+    const { token, ids } = await openAndJoin(call, [
+      { name: '민수', commuting: true, method: 'card' },
+      { name: '하늘', commuting: true, method: 'kakaopay' },
+    ]);
+    await call('POST', `/api/rides/${CODE}/alights`, { name: '민수' }, token);
+    const early = await call('POST', `/api/rides/${CODE}/charges`, { tripId: 't1', items: [{ name: '민수', amount: 1530 }] }, token);
+    assert.deepEqual(early.json.charges.map((c) => [c.name, c.status, c.amount]), [['민수', 'paid', 1530]]);
+    assert.equal((await call('POST', `/api/rides/${CODE}/passengers/${ids['민수']}/stay`)).status, 409, '결제 뒤에는 취소할 수 없다');
+
+    const end = await call('POST', `/api/rides/${CODE}/charges`, { tripId: 't1', items: [{ name: '민수', amount: 1530 }, { name: '하늘', amount: 4580 }] }, token);
+    assert.deepEqual(end.json.charges.map((c) => [c.name, c.amount]), [['민수', 1530], ['하늘', 4580]]);
+    assert.equal(end.json.charges[0].receiptId, early.json.charges[0].receiptId, '먼저 낸 결제를 그대로 돌려준다');
+  });
+});
+
 test('탑승 등록 페이지와 상태 확인', async () => {
   await withServer(async (call) => {
     const page = await call('GET', `/ride/${CODE}`);

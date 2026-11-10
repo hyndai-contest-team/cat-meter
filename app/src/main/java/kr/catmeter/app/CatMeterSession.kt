@@ -31,7 +31,9 @@ import kr.catmeter.app.trip.CommuteRule
 import kr.catmeter.app.trip.CommuteWindow
 import kr.catmeter.app.trip.EnergyProfile
 import kr.catmeter.app.trip.GeoPoint
+import kr.catmeter.app.trip.AlightTracker
 import kr.catmeter.app.trip.JoinPoint
+import kr.catmeter.app.trip.TripBill
 import kr.catmeter.app.trip.SeatPosition
 import kr.catmeter.app.trip.SeatPrompts
 import kr.catmeter.app.trip.SeatSignal
@@ -80,7 +82,36 @@ class CatMeterSession(context: Context) {
         val seats: Map<SeatPosition, SeatSignal> = emptyMap(),
         /** 새로 앉았지만 아직 탑승 등록하지 않은 자리. 정차 중이면 첫 자리의 탑승 QR 을 자동으로 띄운다. */
         val seatPrompts: List<SeatPosition> = emptyList(),
+        /** 이동 중에 먼저 내린 사람 */
+        val alights: Map<String, AlightInfo> = emptyMap(),
+        /** 자리가 비어 하차 판단을 기다리는 사람 */
+        val alightPending: Set<String> = emptySet(),
+    ) {
+        /** 먼저 내린 사람의 하차 지점 */
+        val leaves: Map<String, JoinPoint> get() = alights.mapValues { it.value.point }
+    }
+
+    /** 먼저 내린 사람. 하차 지점은 자리가 빈 순간이다. */
+    data class AlightInfo(
+        val seat: SeatPosition,
+        val point: JoinPoint,
+        val status: AlightStatus,
+        /** 서버에 하차를 알린 시각. 이때부터 [ALIGHT_GRACE_MS] 동안 승객이 취소할 수 있다. */
+        val graceSinceMs: Long = 0L,
+        val charge: BoardingClient.Charge? = null,
     )
+
+    enum class AlightStatus {
+        /** 서버에 하차를 알리는 중 */
+        NOTIFYING,
+        /** 승객이 '아직 타고 있어요'를 누를 수 있는 시간 */
+        GRACE,
+        CHARGING,
+        /** 결제 결과를 받음 (결제됨·미등록·출퇴근 아님 등) */
+        DONE,
+        /** 지금 결제하지 않고 도착 때 함께 결제 (출퇴근 판정 전, 서버 연결 실패 등) */
+        AT_ARRIVAL,
+    }
 
     sealed interface AutoPay {
         /** 탑승 QR 을 쓰지 않았거나 결제 대상이 아닌 이동 */
@@ -120,6 +151,10 @@ class CatMeterSession(context: Context) {
     private val boardedNames = mutableSetOf<String>()
     /** 이번 탑승 코드로 서버에 연 이동의 차량 토큰. QR 화면을 닫아도 도착 후 자동결제에 쓰므로 이동이 끝날 때까지 둔다. */
     private var boardingToken: String? = null
+    /** 탑승자 목록을 받아 오는 일. QR 화면이 떠 있거나 이동 중이면 계속한다 (하차 취소·중간 탑승을 받기 위해). */
+    private var pollJob: Job? = null
+    private var qrOpen = false
+    private val alightTracker = AlightTracker()
 
     /**
      * 시연용: 켜면 시간·장소와 관계없이 출퇴근 함께 타기로 판정해 자동결제(테스트)를 보여 준다.
@@ -235,6 +270,7 @@ class CatMeterSession(context: Context) {
      * 서버에 연결하지 못하면 Offline 으로 두고, 다시 부르면 다시 시도한다.
      */
     fun openBoarding() {
+        qrOpen = true
         if (boardingJob?.isActive == true) return
         val code = _state.value.boardingCode
         _state.update { it.copy(boardingLink = BoardingLink.Connecting) }
@@ -249,14 +285,19 @@ class CatMeterSession(context: Context) {
             }
             boardingToken = opened.ownerToken
             _state.update { it.copy(boardingLink = BoardingLink.Ready(opened.joinUrl)) }
-            while (isActive) {
+            ensurePolling()
+        }
+    }
+
+    /** QR 화면이 떠 있거나 이동 중인 동안 탑승자 목록을 받아 온다 */
+    private fun ensurePolling() {
+        if (pollJob?.isActive == true || boardingToken == null) return
+        val code = _state.value.boardingCode
+        pollJob = scope.launch {
+            while (isActive && (qrOpen || _state.value.phase == Phase.DRIVING)) {
+                val fetchedAt = now()
                 try {
-                    val riders = boardingClient.riders(code)
-                    riders.forEach { r -> if (boardedNames.add(r.name)) addPassenger(r.name) }
-                    _state.update {
-                        val assigned = riders.mapNotNull(BoardingClient.Rider::seat).toSet()
-                        it.copy(riders = riders, seatPrompts = it.seatPrompts.filterNot { seat -> seat in assigned })
-                    }
+                    applyRiders(boardingClient.riders(code), fetchedAt)
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     Log.w(TAG, "boarding poll failed: ${e.message}")
@@ -266,13 +307,37 @@ class CatMeterSession(context: Context) {
         }
     }
 
+    private fun applyRiders(riders: List<BoardingClient.Rider>, fetchedAt: Long) {
+        riders.forEach { r -> if (boardedNames.add(r.name)) addPassenger(r.name) }
+        // 하차를 알린 뒤에 받은 목록에서 하차가 아니면 승객이 '아직 타고 있어요'를 누른 것이다
+        val undone = _state.value.alights.filter { (name, a) ->
+            a.status == AlightStatus.GRACE && fetchedAt > a.graceSinceMs && riders.any { it.name == name && !it.alighted }
+        }
+        undone.forEach { (name, a) ->
+            Log.i(TAG, "alight undone by rider: $name")
+            alightTracker.suppress(a.seat)
+        }
+        _state.update {
+            val assigned = riders.mapNotNull(BoardingClient.Rider::seat).toSet()
+            it.copy(
+                riders = riders,
+                seatPrompts = it.seatPrompts.filterNot { seat -> seat in assigned },
+                alights = it.alights - undone.keys,
+            )
+        }
+    }
+
     /** 운전자가 좌석 탑승 QR 에서 '나중에'를 눌렀을 때. 그 자리가 비었다가 다시 앉을 때까지 다시 띄우지 않는다. */
     fun dismissSeatPrompt(seat: SeatPosition) = _state.update { it.copy(seatPrompts = it.seatPrompts - seat) }
 
     private fun State.assignedSeats(): Set<SeatPosition> = riders.mapNotNull(BoardingClient.Rider::seat).toSet()
 
-    /** 탑승 QR 화면을 닫을 때 부른다. 서버의 탑승 정보는 남아 있어서 다시 열면 이어서 받는다. */
+    /** 운전자가 '나중에'로 넘긴 자리의 QR 을 다시 띄운다 */
+    fun promptSeat(seat: SeatPosition) = _state.update { it.copy(seatPrompts = listOf(seat) + (it.seatPrompts - seat)) }
+
+    /** 탑승 QR 화면을 닫을 때 부른다. 서버의 탑승 정보는 남아 있어서 다시 열면 이어서 받는다. 이동 중이면 목록은 계속 받는다. */
     fun closeBoarding() {
+        qrOpen = false
         boardingJob?.cancel()
         boardingJob = null
         _state.update { it.copy(boardingLink = BoardingLink.Idle) }
@@ -305,28 +370,123 @@ class CatMeterSession(context: Context) {
         _state.update {
             it.copy(
                 phase = Phase.DRIVING, live = t.snapshot(now()), record = null, arrivalSuggested = false, midJoins = emptyMap(),
+                alights = emptyMap(), alightPending = emptySet(),
                 destinationName = navi.destination.value?.name,
                 autoStarted = auto,
             )
         }
+        alightTracker.reset()
+        ensurePolling()
         tickJob?.cancel()
         tickJob = scope.launch {
             while (isActive) {
                 // 속도 이벤트는 값이 바뀔 때만 오므로, 일정 속도 구간도 적분되게 1초마다 현재 속도를 넣는다.
                 tracker?.let { tr ->
-                    tr.onSpeed(speedKph, now())
-                    _state.update { it.copy(live = tr.snapshot(now())) }
+                    val t0 = now()
+                    tr.onSpeed(speedKph, t0)
+                    val snap = tr.snapshot(t0)
+                    checkAlights(t0, JoinPoint(snap.distanceKm, snap.elapsedMs))
+                    _state.update { it.copy(live = snap, alightPending = alightTracker.pending) }
                 }
                 delay(1_000L)
             }
         }
     }
 
+    // ── 중간 하차 ────────────────────────────────────────────────
+    /** 1초마다: 자리가 빈 사람을 하차로 판단하고, 취소할 시간이 지난 사람을 결제한다 */
+    private fun checkAlights(nowMs: Long, point: JoinPoint) {
+        val st = _state.value
+        val seated = st.riders
+            .filter { it.seat != null && it.name in st.passengers && it.name !in st.alights }
+            .associate { it.seat!! to it.name }
+        alightTracker.update(
+            nowMs, st.seats, seated,
+            stopped = speedKph < TripTracker.STOPPED_KPH,
+            moving = speedKph >= DEPART_KPH,
+            point = point,
+        ).forEach(::onAlight)
+        st.alights
+            .filter { (_, a) -> a.status == AlightStatus.GRACE && nowMs - a.graceSinceMs >= ALIGHT_GRACE_MS }
+            .keys.forEach(::chargeAlighted)
+    }
+
+    private fun onAlight(a: AlightTracker.Alight) {
+        Log.i(TAG, "alight: ${a.name} at ${a.point}")
+        setAlight(a.name, AlightInfo(a.seat, a.point, AlightStatus.NOTIFYING))
+        val token = boardingToken ?: return setAlight(a.name) { it.copy(status = AlightStatus.AT_ARRIVAL) }
+        val code = _state.value.boardingCode
+        scope.launch {
+            try {
+                boardingClient.alight(code, token, a.name)
+                setAlight(a.name) { it.copy(status = AlightStatus.GRACE, graceSinceMs = now()) }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "alight notify failed: ${e.message}")
+                setAlight(a.name) { it.copy(status = AlightStatus.AT_ARRIVAL) }
+            }
+        }
+    }
+
+    /**
+     * 먼저 내린 사람만 결제한다. 그 사람이 탄 구간은 이미 끝나서 금액이 바뀌지 않는다.
+     * 출퇴근 함께 타기 최종 판정은 도착해야 할 수 있으므로, 지금까지의 조건(출발 시각·출발지·내비 목적지)으로 미리 판정해
+     * 맞을 때만 결제하고, 아니면 도착 때 최종 판정으로 결제한다.
+     */
+    private fun chargeAlighted(name: String) {
+        val tr = tracker ?: return
+        val token = boardingToken
+        if (token == null || !provisionalCommute()) {
+            setAlight(name) { it.copy(status = AlightStatus.AT_ARRIVAL) }
+            return
+        }
+        val st = _state.value
+        val snap = tr.snapshot(now())
+        val amount = TripBill.shares(snap.distanceKm, snap.elapsedMs, st.energy, st.passengers, st.midJoins, st.leaves)[name]
+            ?: return setAlight(name) { it.copy(status = AlightStatus.AT_ARRIVAL) }
+        setAlight(name) { it.copy(status = AlightStatus.CHARGING) }
+        val code = st.boardingCode
+        scope.launch {
+            try {
+                val charge = boardingClient.charge(code, token, tripId(tr), mapOf(name to amount)).firstOrNull()
+                setAlight(name) { it.copy(status = AlightStatus.DONE, charge = charge) }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "alight charge failed: ${e.message}")
+                setAlight(name) { it.copy(status = AlightStatus.AT_ARRIVAL) }
+            }
+        }
+    }
+
+    /** 이동 중 미리 판정: 지금까지의 출발 시각·출발지와 내비 목적지로 출퇴근 함께 타기인지 본다 */
+    private fun provisionalCommute(): Boolean {
+        if (demoCommute) return true
+        val tr = tracker ?: return false
+        val start = toLocal(tr.snapshot(now()).startedAtMs)
+        return CommuteRule.check(
+            start = start, end = toLocal(now()),
+            from = tripFrom, to = navi.destination.value?.point,
+            home = navi.home.value, office = navi.office.value,
+            alreadySettledInWindow = false,
+        ).eligible
+    }
+
+    private fun setAlight(name: String, info: AlightInfo) = _state.update { it.copy(alights = it.alights + (name to info)) }
+
+    private fun setAlight(name: String, f: (AlightInfo) -> AlightInfo) = _state.update { st ->
+        val cur = st.alights[name] ?: return@update st
+        st.copy(alights = st.alights + (name to f(cur)))
+    }
+
+    /** 서버 결제 요청에 쓰는 이동 번호 (먼저 내린 사람과 도착 결제가 같은 번호를 써야 두 번 결제하지 않는다) */
+    private fun tripId(t: TripTracker): String = t.snapshot(now()).startedAtMs.toString()
+
     fun dismissArrival() = _state.update { it.copy(arrivalSuggested = false) }
 
     fun finishTrip() {
         val t = tracker ?: return
         tickJob?.cancel()
+        alightTracker.reset()
         val end = now()
         t.onSpeed(speedKph, end)
         val s = t.snapshot(end)
@@ -349,6 +509,7 @@ class CatMeterSession(context: Context) {
             cat = st.cat,
             passengers = st.passengers,
             joins = st.midJoins.filterKeys { it in st.passengers },
+            leaves = st.leaves.filterKeys { it in st.passengers },
             rideNumber = st.pastRides + 1,
             energy = st.energy,
             destinationName = st.destinationName ?: navi.destination.value?.name,
@@ -371,7 +532,7 @@ class CatMeterSession(context: Context) {
         store.addTrip(record)
         tracker = null
         _state.update {
-            it.copy(phase = Phase.ARRIVED, record = record, live = null, pastRides = it.pastRides + 1, arrivalSuggested = false)
+            it.copy(phase = Phase.ARRIVED, record = record, live = null, pastRides = it.pastRides + 1, arrivalSuggested = false, alightPending = emptySet())
         }
         chargeRiders()
     }
@@ -394,7 +555,8 @@ class CatMeterSession(context: Context) {
         _state.update { it.copy(autoPay = AutoPay.Charging) }
         scope.launch {
             try {
-                val charges = boardingClient.charge(code, token, r.id.toString(), shares)
+                // 먼저 내린 사람도 함께 보낸다. 이미 결제한 사람은 서버가 지난 결과를 돌려준다.
+                val charges = boardingClient.charge(code, token, r.startedAtMs.toString(), shares)
                 val paidAny = charges.any { it.status == BoardingClient.Charge.Status.PAID }
                 val settled = if (paidAny && r.settledAtMs == null) r.copy(settledAtMs = now()).also(store::updateTrip) else r
                 _state.update { if (it.record?.id == r.id) it.copy(record = settled, autoPay = AutoPay.Done(charges)) else it }
@@ -409,12 +571,15 @@ class CatMeterSession(context: Context) {
     /** 영수증을 닫고 다음 이동을 준비한다 */
     fun backToSetup() {
         closeBoarding()
+        pollJob?.cancel()
+        pollJob = null
         boardedNames.clear()
         boardingToken = null
         _state.update {
             it.copy(
                 phase = Phase.SETUP, record = null, destinationName = null,
                 boardingCode = Boarding.newCode(), riders = emptyList(), autoPay = AutoPay.None, midJoins = emptyMap(),
+                alights = emptyMap(), alightPending = emptySet(),
             )
         }
     }
@@ -432,6 +597,10 @@ class CatMeterSession(context: Context) {
         const val AUTO_START_MS = 3_000L
         /** 좌석 신호가 이만큼 그대로일 때만 앉음·비움으로 본다 */
         private const val SEAT_SETTLE_MS = 1_500L
+        /** 하차를 알린 뒤 승객이 '아직 타고 있어요'를 누를 수 있는 시간. 지나면 그 사람만 결제한다. */
+        const val ALIGHT_GRACE_MS = 60_000L
+        /** 좌석 센서가 없는 자리에서 '다시 출발'로 보는 속도 */
+        private const val DEPART_KPH = 5f
         /** 탑승 QR 화면이 떠 있는 동안 탑승자 목록을 확인하는 간격 */
         private const val BOARDING_POLL_MS = 2_000L
     }
