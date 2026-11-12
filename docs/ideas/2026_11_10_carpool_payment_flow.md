@@ -3,9 +3,9 @@
 - 작성일: 2026년 11월 10일
 - 작성자: 구수민
 - 관련 문서:
-  - `2026_11_01_leejihun_nyang_meter.txt` (냥수증과 QR 결제)
-  - `2026_11_01_joonhyuk_cat_meter_cost_split.txt` (탑승 구간별 비용 분담)
-  - `2026_11_05_ideas_summary.txt` (5-라. 결제·송금 방식)
+  - `2026_11_01_leejihun_nyang_meter.md` (냥수증과 QR 결제)
+  - `2026_11_01_joonhyuk_cat_meter_cost_split.md` (탑승 구간별 비용 분담)
+  - `2026_11_05_ideas_summary.md` (5-라. 결제·송금 방식)
   - `2026_11_10_toll_split.md` (통행료 나누기)
   - `2026_11_10_payment_phases.md` (공모전 단계 송금 링크와 사업화 단계 자동결제 비교)
 
