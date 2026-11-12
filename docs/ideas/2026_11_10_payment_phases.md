@@ -5,7 +5,7 @@
 - 관련 문서:
   - `2026_11_10_carpool_payment_flow.md` (사업화 단계: 자동결제, 수익 모델, 보험, 서버)
   - `2026_11_10_toll_split.md` (통행료 나누기)
-  - `2026_11_01_joonhyuk_cat_meter_cost_split.txt` (2-다. 송금 링크로 정산 공유)
+  - `2026_11_01_joonhyuk_cat_meter_cost_split.md` (2-다. 송금 링크로 정산 공유)
 
 이 문서는 제안이다. 팀이 합의한 기획은 아니다. 어느 방식으로 공모전에 나갈지는 팀 회의에서 정한다.
 

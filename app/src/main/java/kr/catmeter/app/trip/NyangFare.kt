@@ -3,7 +3,7 @@ package kr.catmeter.app.trip
 import kotlin.math.roundToInt
 
 /**
- * 이동 거리와 시간을 가상 단위 '냥'으로 바꾼다 (docs/ideas/2026_11_01_leejihun_nyang_meter.txt).
+ * 이동 거리와 시간을 가상 단위 '냥'으로 바꾼다 (docs/ideas/2026_11_01_leejihun_nyang_meter.md).
  *
  * - 택시 미터기처럼 일정 구간을 채울 때마다 한 칸씩 오른다. 숫자가 계속 흘러가지 않아 주행 중에도 한눈에 읽힌다.
  * - 냥은 앱 안의 놀이용 숫자다. 원화 환산·결제와 연결하지 않는다 (취합본 5-다).

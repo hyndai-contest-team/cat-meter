@@ -43,7 +43,7 @@ enum class CatPose {
 /**
  * 앱 전체에서 하나만 쓰는 Filament 엔진과 glTF 로더. 모두 메인 스레드에서만 쓴다.
  * 고양이 모델은 털 색마다 하나: app/src/main/assets/models/cat_<털>.glb
- * (원본: tools/make_cat_glb.py, 명세: docs/spec/cat-model-spec.txt). 털 색·무늬는 모델에 칠해져 있다.
+ * (원본: tools/make_cat_glb.py, 명세: docs/spec/cat-model-spec.md). 털 색·무늬는 모델에 칠해져 있다.
  */
 internal object CatEngine {
     val engine: Engine by lazy {
