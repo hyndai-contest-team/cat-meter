@@ -54,11 +54,13 @@ data class TripRecord(
     val leaves: Map<String, JoinPoint> = emptyMap(),
     /** 나누는 인원에 넣지 않은 사람 (탈 때 출퇴근 길이 아니라고 고른 사람) */
     val notSharing: Set<String> = emptySet(),
+    /** 지난 요금소와 통행료 (내비 경로 통행료 기준) */
+    val tolls: List<TollEvent> = emptyList(),
 ) {
     val durationMs: Long get() = (endedAtMs - startedAtMs).coerceAtLeast(0L)
-    val bill: TripBill get() = TripBill.of(distanceKm, durationMs, energy)
+    val bill: TripBill get() = TripBill.of(distanceKm, durationMs, energy, tolls.sumOf { it.won })
     /** 실비를 운전자 포함해 나눈 결과. 각자 탄 구간만 낸다. */
-    val split: CostSplit get() = TripBill.split(distanceKm, durationMs, energy, passengers, joins, leaves, notSharing)
+    val split: CostSplit get() = TripBill.split(distanceKm, durationMs, energy, passengers, joins, leaves, notSharing, tolls)
     /** 동승자별 낼 금액(원) */
     val shares: Map<String, Int> get() = split.passengers
 }

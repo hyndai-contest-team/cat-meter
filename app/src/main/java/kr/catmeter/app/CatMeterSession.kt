@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import kr.catmeter.app.car.AaosMonitor
 import kr.catmeter.app.car.NaviSource
 import kr.catmeter.app.car.PleosVehicleSource
+import kr.catmeter.app.car.Announcer
 import kr.catmeter.app.car.DoorSensor
 import kr.catmeter.app.car.SeatSensor
 import kr.catmeter.app.data.BoardingClient
@@ -34,9 +35,12 @@ import kr.catmeter.app.trip.CommuteWindow
 import kr.catmeter.app.trip.EnergyProfile
 import kr.catmeter.app.trip.GeoPoint
 import kr.catmeter.app.trip.AlightTracker
+import kr.catmeter.app.trip.Announcements
 import kr.catmeter.app.trip.DoorSignal
 import kr.catmeter.app.trip.doorSignal
 import kr.catmeter.app.trip.JoinPoint
+import kr.catmeter.app.trip.TollEvent
+import kr.catmeter.app.trip.TollTracker
 import kr.catmeter.app.trip.TripBill
 import kr.catmeter.app.trip.SeatPosition
 import kr.catmeter.app.trip.SeatPrompts
@@ -90,6 +94,8 @@ class CatMeterSession(context: Context) {
         val alights: Map<String, AlightInfo> = emptyMap(),
         /** 자리가 비어 하차 판단을 기다리는 사람 */
         val alightPending: Set<String> = emptySet(),
+        /** 이번 이동에서 지난 요금소와 통행료 (내비 경로 통행료 기준) */
+        val tolls: List<TollEvent> = emptyList(),
     ) {
         /** 먼저 내린 사람의 하차 지점 */
         val leaves: Map<String, JoinPoint> get() = alights.mapValues { it.value.point }
@@ -146,6 +152,7 @@ class CatMeterSession(context: Context) {
     val navi = NaviSource(context, scope)
     val seatSensor = SeatSensor(context, scope, BuildConfig.SEAT_OCCUPANCY_INVERTED)
     val doorSensor = DoorSensor(context, scope, SystemClock::elapsedRealtime)
+    private val announcer = Announcer(context)
 
     private val _state = MutableStateFlow(
         State(
@@ -168,6 +175,8 @@ class CatMeterSession(context: Context) {
     /** 서버에 마지막으로 알린 좌석 상태 (바뀔 때만 다시 보낸다) */
     private var sentSeats: Map<SeatPosition, Boolean>? = null
     private val alightTracker = AlightTracker()
+    /** 이동 중에만 있다. 내비 경로 통행료를 요금소를 지날 때마다 기록한다 */
+    private var tollTracker: TollTracker? = null
 
     /**
      * 시연용: 켜면 시간·장소와 관계없이 출퇴근 함께 타기로 판정해 자동결제(테스트)를 보여 준다.
@@ -187,6 +196,7 @@ class CatMeterSession(context: Context) {
         navi.start()
         seatSensor.start()
         doorSensor.start()
+        announcer.start()
         // 좌석에 새로 앉으면 그 자리 탑승 QR 을 띄울 목록에 넣는다 (도착 화면에서는 띄우지 않는다).
         // 알림을 등록하는 순간이나 앉는 동안 값이 잠깐 흔들리므로, 값이 [SEAT_SETTLE_MS] 동안 그대로일 때만 본다.
         scope.launch {
@@ -198,6 +208,18 @@ class CatMeterSession(context: Context) {
                         seatPrompts = SeatPrompts.update(it.seatPrompts, it.seats, after, it.assignedSeats(), allowNew = it.phase != Phase.ARRIVED),
                     )
                 }
+            }
+        }
+        // 이동 중에 내비 경로가 새로 잡히거나 남은 요금소 목록이 바뀌면 통행료 기록에 반영한다
+        scope.launch {
+            navi.routeStarted.collect { toll -> tollTracker?.onRoute(toll) }
+        }
+        scope.launch {
+            navi.tollGatesKm.collect { gates ->
+                val tolls = tollTracker ?: return@collect
+                val snap = tracker?.snapshot(now()) ?: return@collect
+                tolls.onGates(JoinPoint(snap.distanceKm, snap.elapsedMs), gates)
+                _state.update { it.copy(tolls = tolls.events) }
             }
         }
         scope.launch {
@@ -397,10 +419,15 @@ class CatMeterSession(context: Context) {
         _state.update {
             it.copy(
                 phase = Phase.DRIVING, live = t.snapshot(now()), record = null, arrivalSuggested = false, midJoins = emptyMap(),
-                alights = emptyMap(), alightPending = emptySet(),
+                alights = emptyMap(), alightPending = emptySet(), tolls = emptyList(),
                 destinationName = navi.destination.value?.name,
                 autoStarted = auto,
             )
+        }
+        // 내비가 이미 안내 중이면 그 경로의 통행료와 요금소를 출발 지점 기준으로 잡는다
+        tollTracker = TollTracker().also { tolls ->
+            tolls.onRoute(navi.destination.value?.tollFare ?: 0)
+            tolls.onGates(JoinPoint.START, navi.tollGatesKm.value)
         }
         alightTracker.reset()
         ensurePolling()
@@ -412,8 +439,10 @@ class CatMeterSession(context: Context) {
                     val t0 = now()
                     tr.onSpeed(speedKph, t0)
                     val snap = tr.snapshot(t0)
-                    checkAlights(t0, JoinPoint(snap.distanceKm, snap.elapsedMs))
-                    _state.update { it.copy(live = snap, alightPending = alightTracker.pending) }
+                    val point = JoinPoint(snap.distanceKm, snap.elapsedMs)
+                    checkAlights(t0, point)
+                    tollTracker?.update(point)
+                    _state.update { it.copy(live = snap, alightPending = alightTracker.pending, tolls = tollTracker?.events ?: it.tolls) }
                 }
                 delay(1_000L)
             }
@@ -448,6 +477,7 @@ class CatMeterSession(context: Context) {
 
     private fun onAlight(a: AlightTracker.Alight) {
         Log.i(TAG, "alight: ${a.name} at ${a.point}")
+        announcer.say(Announcements.alighted(a.name))
         setAlight(a.name, AlightInfo(a.seat, a.point, AlightStatus.NOTIFYING))
         val token = boardingToken ?: return setAlight(a.name) { it.copy(status = AlightStatus.AT_ARRIVAL) }
         val code = _state.value.boardingCode
@@ -477,7 +507,7 @@ class CatMeterSession(context: Context) {
         }
         val st = _state.value
         val snap = tr.snapshot(now())
-        val amount = TripBill.shares(snap.distanceKm, snap.elapsedMs, st.energy, st.passengers, st.midJoins, st.leaves, st.notSharing)[name]
+        val amount = TripBill.shares(snap.distanceKm, snap.elapsedMs, st.energy, st.passengers, st.midJoins, st.leaves, st.notSharing, st.tolls)[name]
             ?: return setAlight(name) { it.copy(status = AlightStatus.AT_ARRIVAL) }
         setAlight(name) { it.copy(status = AlightStatus.CHARGING) }
         val code = st.boardingCode
@@ -521,6 +551,7 @@ class CatMeterSession(context: Context) {
     fun finishTrip() {
         val t = tracker ?: return
         tickJob?.cancel()
+        tollTracker = null
         alightTracker.reset()
         val end = now()
         t.onSpeed(speedKph, end)
@@ -546,6 +577,7 @@ class CatMeterSession(context: Context) {
             joins = st.midJoins.filterKeys { it in st.passengers },
             leaves = st.leaves.filterKeys { it in st.passengers },
             notSharing = st.notSharing,
+            tolls = st.tolls,
             rideNumber = st.pastRides + 1,
             energy = st.energy,
             destinationName = st.destinationName ?: navi.destination.value?.name,
@@ -596,6 +628,7 @@ class CatMeterSession(context: Context) {
                 val paidAny = charges.any { it.status == BoardingClient.Charge.Status.PAID }
                 val settled = if (paidAny && r.settledAtMs == null) r.copy(settledAtMs = now()).also(store::updateTrip) else r
                 _state.update { if (it.record?.id == r.id) it.copy(record = settled, autoPay = AutoPay.Done(charges)) else it }
+                Announcements.settled(charges)?.let(announcer::say)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.w(TAG, "auto pay failed: ${e.message}")
