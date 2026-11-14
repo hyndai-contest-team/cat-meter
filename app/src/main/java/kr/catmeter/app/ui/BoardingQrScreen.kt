@@ -29,8 +29,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -38,12 +36,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kr.catmeter.app.CatMeterSession
-import kr.catmeter.app.data.BoardingClient
 import kr.catmeter.app.trip.Boarding
 import kr.catmeter.app.trip.SeatPosition
 
@@ -75,7 +76,8 @@ fun BoardingQrScreen(
     val info = @Composable {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Steps(pickSeat = seat == null && state.seats.isNotEmpty())
-            BoardedCard(state, onPrompt = if (seat == null) session::promptSeat else null)
+            // 주행 제한 중에는 다른 자리 QR 을 띄우지 않는다
+            BoardedCard(state, wide, onPrompt = if (seat == null && !car.restricted) session::promptSeat else null)
         }
     }
 
@@ -180,40 +182,63 @@ private fun Steps(pickSeat: Boolean) {
 
 /**
  * 지금 탄 사람과 좌석 배치도.
- * 앉았지만 아직 탑승 등록하지 않은 자리는 점선으로 보여 준다. 누르면 그 자리의 QR 을 띄운다
- * (운전자가 '나중에'로 넘긴 자리를 다시 띄울 때 쓴다).
+ * 앉았지만 아직 탑승 등록하지 않은 자리는 배치도에 점선으로 보여 주고, 아래에 그 자리 QR 을 띄우는 버튼을 둔다.
  */
 @Composable
-private fun BoardedCard(state: CatMeterSession.State, onPrompt: ((SeatPosition) -> Unit)?) {
+private fun BoardedCard(state: CatMeterSession.State, wide: Boolean, onPrompt: ((SeatPosition) -> Unit)?) {
     val passengers = state.passengers
     val riders = state.riders
-    Card(Modifier.fillMaxWidth(), padding = 16.dp) {
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (state.seats.isNotEmpty()) SeatMap(state, onPrompt)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("지금 탑승 ${passengers.size}명", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                if (passengers.isEmpty()) Text("아직 탄 사람이 없어요", color = Palette.sub, fontSize = 15.sp)
-                passengers.forEach { name ->
-                    val rider = riders.firstOrNull { it.name == name }
-                    val who = rider?.seat?.let { "$name · ${it.label}" } ?: name
-                    val (note, color) = when {
-                        rider == null -> "직접 입력" to Palette.sub
-                        !rider.commuting -> "출퇴근 아님" to Palette.sub
-                        rider.paymentLabel == null -> "결제 미등록" to Palette.warn
-                        else -> rider.paymentLabel to Palette.ok
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(who, fontSize = 15.sp, maxLines = 1)
-                        Text(note, color = color, fontSize = 13.sp, maxLines = 1)
-                    }
+    val waiting = waitingSeats(state)
+    val list = @Composable { mod: Modifier ->
+        Column(mod, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("지금 탑승 ${passengers.size}명", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            if (passengers.isEmpty()) Text("아직 탄 사람이 없어요", color = Palette.sub, fontSize = 15.sp)
+            passengers.forEach { name ->
+                val rider = riders.firstOrNull { it.name == name }
+                val who = rider?.seat?.let { "$name · ${it.label}" } ?: name
+                val (note, color) = when {
+                    rider == null -> "직접 입력" to Palette.sub
+                    !rider.commuting -> "출퇴근 아님" to Palette.sub
+                    rider.paymentLabel == null -> "결제 미등록" to Palette.warn
+                    else -> rider.paymentLabel to Palette.ok
                 }
-                val waiting = waitingSeats(state)
-                if (waiting.isNotEmpty()) {
-                    Text(
-                        waiting.joinToString(", ") { it.label } + "에 누가 앉았어요. QR을 찍어 주세요",
-                        color = Palette.accent, fontSize = 14.sp,
-                    )
+                // 이름이 길면 이름을 줄이고, 결제 상태는 항상 보이게 한다
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(who, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    Text(note, color = color, fontSize = 13.sp, maxLines = 1)
                 }
+            }
+        }
+    }
+    Card(Modifier.fillMaxWidth(), padding = 16.dp, gap = 12.dp) {
+        when {
+            state.seats.isEmpty() -> list(Modifier.fillMaxWidth())
+            wide -> Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                SeatMap(state, onPrompt)
+                list(Modifier.weight(1f))
+            }
+            // 좁은 창: 배치도 옆에 글자 자리가 없으므로 위아래로 놓는다
+            else -> {
+                SeatMap(state, onPrompt)
+                list(Modifier.fillMaxWidth())
+            }
+        }
+        if (waiting.isNotEmpty()) WaitingSeats(waiting, onPrompt)
+    }
+}
+
+/** 앉았지만 아직 탑승 등록하지 않은 자리. 운전자가 '나중에'로 넘긴 자리의 QR 을 버튼으로 다시 띄울 수 있다. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WaitingSeats(waiting: List<SeatPosition>, onPrompt: ((SeatPosition) -> Unit)?) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            waiting.joinToString(", ") { it.label } + "에 앉은 분이 아직 등록하지 않았어요",
+            color = Palette.accent, fontSize = 14.sp,
+        )
+        if (onPrompt != null) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                waiting.forEach { seat -> OutlinePill("${seat.label} QR", { onPrompt(seat) }) }
             }
         }
     }
@@ -240,7 +265,7 @@ private fun SeatMap(state: CatMeterSession.State, onPrompt: ((SeatPosition) -> U
         rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { seat ->
-                    val cell = Modifier.weight(1f).height(44.dp)
+                    val cell = Modifier.weight(1f).height(48.dp)   // 누르는 칸이므로 48dp 이상
                     val rider = bySeat[seat]
                     when {
                         seat !in known -> Spacer(cell)
@@ -250,7 +275,11 @@ private fun SeatMap(state: CatMeterSession.State, onPrompt: ((SeatPosition) -> U
                             "앉음",
                             cell
                                 .clip(SeatShape)
-                                .then(if (onPrompt != null) Modifier.clickable(onClickLabel = "${seat.label} QR 띄우기") { onPrompt(seat) } else Modifier)
+                                .then(
+                                    if (onPrompt != null) Modifier.clickable(onClickLabel = "QR 띄우기", role = Role.Button) { onPrompt(seat) }
+                                    else Modifier,
+                                )
+                                .semantics { contentDescription = "${seat.label}, 앉았지만 등록하지 않음" }
                                 .dashedBorder(Palette.accent),
                             Palette.accent,
                         )
@@ -267,7 +296,10 @@ private val SeatShape = RoundedCornerShape(10.dp)
 @Composable
 private fun SeatCell(text: String, modifier: Modifier, color: Color, bold: Boolean = false) {
     Box(modifier, contentAlignment = Alignment.Center) {
-        Text(text, color = color, fontSize = 12.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
+        Text(
+            text, color = color, fontSize = 12.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp),
+        )
     }
 }
 
