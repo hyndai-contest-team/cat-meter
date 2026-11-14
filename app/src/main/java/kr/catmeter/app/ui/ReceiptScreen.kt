@@ -151,7 +151,8 @@ private fun ReceiptCard(record: TripRecord, layer: GraphicsLayer) {
             Text(" 냥", color = Palette.paperSub, fontSize = 17.sp, modifier = Modifier.padding(bottom = 5.dp))
         }
         // 결제는 냥이 아니라 실비만, 운전자까지 포함해 나눈다
-        BigLine("${bill.energy.kind.label} (실비)", "${formatNyang(bill.costWon)}원")
+        BigLine("${bill.energy.kind.label} (실비)", "${formatNyang(bill.energyWon)}원")
+        if (bill.tollWon > 0) BigLine("통행료 (실비)", "${formatNyang(bill.tollWon)}원")
         val amounts = record.shares.filterKeys { it !in record.notSharing }.values
         if (amounts.isNotEmpty()) {
             if (amounts.min() == amounts.max()) BigLine("1인당 (운전자 포함)", "${formatNyang(amounts.max())}원")

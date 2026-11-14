@@ -259,7 +259,7 @@ private fun PassengerEditor(session: CatMeterSession, passengers: List<String>, 
 
 /**
  * 출발 전 예상 실비. 내비에서 목적지를 찍으면 자동으로 잡힌다.
- * 실비 = 주유비·충전비 (내비 예상 거리 기준). 운전자를 포함해 나눈다. 통행료·주차비는 넣지 못한다.
+ * 실비 = 주유비·충전비 (내비 예상 거리 기준) + 내비가 알려 준 경로 통행료. 운전자를 포함해 나눈다.
  */
 @Composable
 private fun EstimateCard(state: CatMeterSession.State, car: CarView) {
@@ -274,7 +274,7 @@ private fun EstimateCard(state: CatMeterSession.State, car: CarView) {
             )
             return@Card
         }
-        val bill = TripBill.of(dest.remainKm, dest.remainTimeS * 1000L, state.energy)
+        val bill = TripBill.of(dest.remainKm, dest.remainTimeS * 1000L, state.energy, dest.tollFare)
         Text(
             "${dest.name} · ${formatKm(dest.remainKm)} km · 약 ${formatDuration(dest.remainTimeS * 1000L)}",
             fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2,
@@ -284,7 +284,8 @@ private fun EstimateCard(state: CatMeterSession.State, car: CarView) {
             BigValue(formatNyang(bill.costWon), "원", 30.sp, Palette.accent)
         }
         Text(
-            "${bill.energy.kind.label} ${energyBasis(bill)}" +
+            "${bill.energy.kind.label} ${formatNyang(bill.energyWon)}원" +
+                (if (bill.tollWon > 0) " + 통행료 ${formatNyang(bill.tollWon)}원" else "") +
                 (bill.perPerson(state.passengers.size)?.let { " · 운전자 포함 1인당 약 ${formatNyang(it)}원" } ?: " · 운전자도 함께 나눠 내요"),
             color = Palette.sub, fontSize = 14.sp,
         )

@@ -10,6 +10,7 @@ import kr.catmeter.app.trip.EnergyProfile
 import kr.catmeter.app.trip.GeoPoint
 import kr.catmeter.app.trip.JoinPoint
 import kr.catmeter.app.trip.Fur
+import kr.catmeter.app.trip.TollEvent
 import kr.catmeter.app.trip.TripRecord
 import kr.catmeter.app.trip.TripTracker
 import org.json.JSONArray
@@ -90,6 +91,9 @@ class CatMeterStore(context: Context) {
         .put("joins", pointsJson(t.joins))
         .put("leaves", pointsJson(t.leaves))
         .put("notSharing", JSONArray(t.notSharing.toList()))
+        .put("tolls", JSONArray().apply {
+            t.tolls.forEach { put(JSONObject().put("km", it.point.distanceKm.toDouble()).put("ms", it.point.elapsedMs).put("won", it.won)) }
+        })
 
     private fun tripFrom(o: JSONObject) = TripRecord(
         id = o.getLong("id"),
@@ -128,6 +132,12 @@ class CatMeterStore(context: Context) {
         joins = pointsFrom(o.optJSONObject("joins")),
         leaves = pointsFrom(o.optJSONObject("leaves")),
         notSharing = o.optJSONArray("notSharing")?.strings()?.toSet() ?: emptySet(),
+        tolls = o.optJSONArray("tolls")?.let { a ->
+            List(a.length()) { i ->
+                val e = a.getJSONObject(i)
+                TollEvent(JoinPoint(e.getDouble("km").toFloat(), e.getLong("ms")), e.getInt("won"))
+            }
+        } ?: emptyList(),
     )
 
     private fun pointsJson(points: Map<String, JoinPoint>) = JSONObject().apply {
