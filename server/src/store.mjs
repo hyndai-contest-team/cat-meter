@@ -147,7 +147,7 @@ export function createMemoryStore({ now = () => Date.now() } = {}) {
     /** 테스트 결제 수단 등록. 실제 서비스에서는 결제대행사 결제창이 빌링키를 발급한다. */
     registerPayment(code, id, method) {
       const passenger = this.getPassenger(code, id);
-      if (!passenger.commuting) throw new RideError('not_commuting', '출퇴근 길이 아니면 결제 없이 냥만 표시해요.');
+      if (!passenger.commuting) throw new RideError('not_commuting', '출퇴근 길이 아니면 결제 없이 기록만 남겨요.');
       if (!Object.hasOwn(PAYMENT_METHODS, method)) throw new RideError('invalid_method', '결제 수단을 다시 골라 주세요.');
       passenger.payment = { method, label: PAYMENT_METHODS[method], billingKey: `mock_bk_${token(8)}`, registeredAt: now() };
       return passenger;
