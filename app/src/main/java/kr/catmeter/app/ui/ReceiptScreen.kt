@@ -78,28 +78,22 @@ fun ReceiptScreen(session: CatMeterSession, state: CatMeterSession.State, car: C
             } else {
                 SettlePanel(session, record, state.autoPay)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = { export(share = false) }, modifier = Modifier.weight(1f).height(52.dp)) {
-                        Text("이미지 저장", fontSize = 17.sp)
-                    }
-                    OutlinedButton(onClick = { export(share = true) }, modifier = Modifier.weight(1f).height(52.dp)) {
-                        Text("공유", fontSize = 17.sp)
-                    }
+                    OutlinePill("이미지 저장", { export(share = false) }, Modifier.weight(1f).height(ButtonHeight))
+                    OutlinePill("공유", { export(share = true) }, Modifier.weight(1f).height(ButtonHeight))
                 }
-                OutlinedButton(onClick = session::backToSetup, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                    Text("새 드라이브 준비", fontSize = 17.sp)
-                }
+                PrimaryPill("새 드라이브 준비", session::backToSetup, Modifier.fillMaxWidth().height(ButtonHeight))
             }
             message?.let { Text(it, color = Palette.sub, fontSize = 14.sp) }
         }
     }
 
     if (wide) {
-        Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Box(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
                 ReceiptCard(record, layer)
             }
             Column(Modifier.weight(0.8f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center) {
-                Text("도착했어요!", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Text("도착했어요!", fontSize = 30.sp, fontWeight = FontWeight.Black)
                 Text("${withParticle(record.cat.name)} 함께한 기록이에요.", color = Palette.sub, fontSize = 16.sp)
                 Spacer(Modifier.height(20.dp))
                 actions()
