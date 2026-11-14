@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#14171C">
+<meta name="theme-color" content="#FFFBF2">
 <title>고양 미터기 탑승</title>
 <style>
   :root {
-    --bg: #14171C; --surface: #1E232B; --surface-high: #2A313B; --line: #2A313B;
-    --text: #F2F4F7; --sub: #9AA4B2; --accent: #F4B860; --on-accent: #2B1D07;
-    --ok: #7FD1A8; --warn: #F2A65A;
+    /* 휴대폰 페이지는 냥수증과 같은 종이 색 바탕이다 (디자인 캔버스 06) */
+    --bg: #FFFBF2; --surface: #FFFFFF; --surface-high: #EFE9DD; --line: #E4DCCB;
+    --text: #2B2B2B; --sub: #6F695F; --accent: #F4B860; --on-accent: #2B1D07;
+    --ink: #2B2B2B; --on-ink: #FFFBF2;
+    --ok: #1E7A52; --warn: #A2560A;
     --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
   }
   * { box-sizing: border-box; }
@@ -21,8 +23,8 @@
     display: flex; flex-direction: column; gap: 20px;
   }
   .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .badge { font-size: 13px; color: var(--accent); background: rgba(244, 184, 96, .12); padding: 4px 10px; border-radius: 99px; }
-  .test { font-size: 12px; color: var(--warn); border: 1px solid rgba(242, 166, 90, .5); padding: 3px 8px; border-radius: 99px; }
+  .badge { font-size: 13px; color: #8A5A12; background: rgba(244, 184, 96, .28); padding: 4px 10px; border-radius: 99px; }
+  .test { font-size: 12px; color: var(--warn); border: 1px solid rgba(162, 86, 10, .45); padding: 3px 8px; border-radius: 99px; }
   h1 { margin: 0; font-size: 26px; line-height: 1.35; word-break: keep-all; }
   .lead { margin: 6px 0 0; color: var(--sub); font-size: 15px; line-height: 1.5; word-break: keep-all; }
   .cat { font-size: 56px; line-height: 1; }
@@ -31,40 +33,40 @@
   label { font-size: 14px; color: var(--sub); }
   input[type=text] {
     font: inherit; font-size: 18px; color: var(--text); background: var(--surface);
-    border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; width: 100%;
+    border: 1.5px solid var(--line); border-radius: 14px; padding: 14px 16px; width: 100%;
   }
   input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .check { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border-radius: 12px; padding: 14px; color: var(--text); font-size: 16px; cursor: pointer; }
-  .check input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+  .check { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 14px; color: var(--text); font-size: 16px; cursor: pointer; }
+  .check input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--ink); flex: none; }
   .check small { display: block; color: var(--sub); font-size: 13px; margin-top: 4px; line-height: 1.45; }
   button {
-    font: inherit; font-size: 18px; font-weight: 700; border: 0; border-radius: 14px; padding: 16px;
-    background: var(--accent); color: var(--on-accent); cursor: pointer;
+    font: inherit; font-size: 17px; font-weight: 700; border: 0; border-radius: 999px; padding: 17px;
+    background: var(--ink); color: var(--on-ink); cursor: pointer;
   }
   button:disabled { opacity: .5; cursor: default; }
   button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
   .methods { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .methods button { background: var(--surface-high); color: var(--text); font-weight: 600; font-size: 16px; padding: 18px 8px; }
-  .card { background: var(--surface); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .methods button { background: var(--surface); color: var(--text); border: 1.5px solid var(--line); border-radius: 14px; font-weight: 600; font-size: 16px; padding: 18px 8px; }
+  .card { background: var(--surface); border: 1.5px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
   .card h2 { margin: 0; font-size: 16px; }
   .row { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
   .row span:first-child { color: var(--sub); }
   .amount { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip { font-size: 14px; padding: 4px 12px; border-radius: 99px; background: rgba(127, 209, 168, .14); color: var(--ok); }
+  .chip { font-size: 14px; padding: 4px 12px; border-radius: 99px; background: rgba(30, 122, 82, .12); color: var(--ok); }
   .muted { color: var(--sub); font-size: 14px; margin: 0; line-height: 1.5; }
   .error { color: var(--warn); font-size: 15px; margin: 0; min-height: 1.2em; }
   .center { text-align: center; align-items: center; }
   .ok { color: var(--ok); }
-  .seatmap { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border-radius: 20px; padding: 14px; }
+  .seatmap { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border: 2px solid var(--line); border-radius: 64px 64px 28px 28px; padding: 22px 16px 16px; }
   .seatmap .front { text-align: center; color: var(--sub); font-size: 13px; }
   .seatrow { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 8px; }
-  .seatbtn { min-width: 0; font-size: 14px; font-weight: 600; padding: 14px 4px; border-radius: 14px; display: flex; flex-direction: column; gap: 4px; align-items: center; word-break: keep-all; text-align: center; }
+  .seatbtn { min-width: 0; font-size: 14px; font-weight: 600; padding: 14px 4px; border-radius: 16px; min-height: 68px; justify-content: center; display: flex; flex-direction: column; gap: 4px; align-items: center; word-break: keep-all; text-align: center; }
   .seatbtn small { font-size: 12px; font-weight: 500; }
-  .seatbtn.free { background: var(--accent); color: var(--on-accent); }
+  .seatbtn.free { background: var(--accent); color: var(--on-accent); border: 3px solid var(--ink); }
   .seatbtn:disabled { background: var(--surface-high); color: var(--sub); opacity: 1; }
-  .linkbtn { background: none; color: var(--sub); font-size: 14px; font-weight: 500; padding: 8px; text-decoration: underline; }
-  .seat { align-self: flex-start; font-size: 15px; font-weight: 600; color: var(--ok); background: rgba(127, 209, 168, .14); padding: 6px 12px; border-radius: 10px; }
+  .linkbtn { background: none; color: #8A5A12; font-size: 14px; font-weight: 500; padding: 8px; text-decoration: underline; }
+  .seat { align-self: flex-start; font-size: 15px; font-weight: 600; color: var(--ok); background: rgba(30, 122, 82, .12); padding: 6px 12px; border-radius: 10px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -139,7 +141,7 @@
       <p class="lead" id="move-lead"></p>
     </div>
     <button id="move-submit" type="button">네, 옮겼어요</button>
-    <button id="move-skip" type="button" style="background: var(--surface-high); color: var(--text)">아니요, 그대로예요</button>
+    <button id="move-skip" type="button" style="background: var(--surface); color: var(--text); border: 1.5px solid var(--line)">아니요, 그대로예요</button>
     <p class="error" id="move-error" role="alert"></p>
   </section>
 

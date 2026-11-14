@@ -2,6 +2,18 @@ package kr.catmeter.app.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,19 +74,19 @@ fun BoardingQrScreen(
     }
     val info = @Composable {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            BoardingInfo(state.passengers, state.riders, pickSeat = seat == null && state.seats.isNotEmpty())
-            if (seat == null) WaitingSeats(state, onPrompt = session::promptSeat)
+            Steps(pickSeat = seat == null && state.seats.isNotEmpty())
+            BoardedCard(state, onPrompt = if (seat == null) session::promptSeat else null)
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp)) {
         Text(
             when {
                 seat != null -> "${seat.label} 탑승 QR"
                 midTrip -> "중간 탑승 QR"
                 else -> "탑승 QR"
             },
-            fontSize = 24.sp, fontWeight = FontWeight.Bold,
+            fontSize = 26.sp, fontWeight = FontWeight.Black,
         )
         Text(
             when {
@@ -92,8 +104,8 @@ fun BoardingQrScreen(
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { qr(280.dp) }
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { info() }
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { qr(250.dp) }
+                Column(Modifier.weight(1.1f).verticalScroll(rememberScrollState())) { info() }
             }
         } else {
             Column(
@@ -108,13 +120,9 @@ fun BoardingQrScreen(
 
         if (seat != null) {
             // 탑승 등록이 끝나면 자동으로 닫힌다. 아이·짐처럼 등록하지 않을 자리는 운전자가 넘긴다.
-            OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                Text("이 자리는 나중에 할게요", fontSize = 17.sp)
-            }
+            OutlinePill("이 자리는 나중에 할게요", onClose, Modifier.fillMaxWidth().height(ButtonHeight))
         } else {
-            Button(onClick = onClose, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                Text("탑승 확인 끝", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
+            PrimaryPill("탑승 확인 끝", onClose, Modifier.fillMaxWidth().height(ButtonHeight))
         }
     }
 }
@@ -128,8 +136,8 @@ private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted
                 color = color, fontSize = 16.sp,
                 modifier = Modifier
                     .size(size)
-                    .background(color.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-                    .padding(16.dp),
+                    .background(color.copy(alpha = 0.1f), CardShape)
+                    .padding(18.dp),
             )
         }
         if (restricted) {
@@ -140,7 +148,7 @@ private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted
             is CatMeterSession.BoardingLink.Ready -> if (seat != null) "${link.joinUrl}?seat=${seat.name}" else link.joinUrl
             is CatMeterSession.BoardingLink.Offline -> {
                 notice("${link.reason}.\n이름을 직접 넣어 주세요.", Palette.warn)
-                OutlinedButton(onClick = onRetry) { Text("다시 연결", fontSize = 16.sp) }
+                OutlinePill("다시 연결", onRetry)
                 return@Column
             }
             CatMeterSession.BoardingLink.Idle, CatMeterSession.BoardingLink.Connecting -> {
@@ -151,8 +159,8 @@ private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted
         val image = remember(joinUrl) { qrBitmap(joinUrl) }
         Box(
             Modifier
-                .background(Color.White, RoundedCornerShape(16.dp))
-                .padding(12.dp),
+                .background(Color.White, CardShape)
+                .padding(16.dp),
         ) {
             Image(image, contentDescription = "탑승 QR", modifier = Modifier.size(size))
         }
@@ -160,38 +168,93 @@ private fun QrBlock(code: String, link: CatMeterSession.BoardingLink, restricted
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BoardingInfo(passengers: List<String>, riders: List<BoardingClient.Rider>, pickSeat: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Step("1", "휴대폰 카메라로 QR을 찍어요")
-            Step("2", if (pickSeat) "앉은 자리를 고르고 이름을 넣으면 탑승 완료" else "열린 화면에서 이름을 넣으면 탑승 완료")
-            Step("3", "결제 수단을 한 번 등록하면 내릴 때 자동결제")
-            Text("테스트 결제 · 실제 출금 없음", color = Palette.warn, fontSize = 13.sp)
-        }
+private fun Steps(pickSeat: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Step("1", "휴대폰 카메라로 QR을 찍어요")
+        Step("2", if (pickSeat) "앉은 자리를 고르고 이름을 넣으면 탑승 완료" else "열린 화면에서 이름을 넣으면 탑승 완료")
+        Step("3", "결제 수단을 한 번 등록하면 내릴 때 자동결제")
+        Text("테스트 결제 · 실제 출금 없음", color = Palette.warn, fontSize = 13.sp)
+    }
+}
 
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .background(Palette.surface, RoundedCornerShape(16.dp))
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text("지금 탑승 ${passengers.size}명", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            if (passengers.isEmpty()) {
-                Text("아직 탄 사람이 없어요", color = Palette.sub, fontSize = 15.sp)
-            } else {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    passengers.forEach { name ->
-                        val rider = riders.firstOrNull { it.name == name }
-                        val who = rider?.seat?.let { "$name(${it.label})" } ?: name
-                        when {
-                            rider == null -> Chip("$who · 직접 입력", Palette.sub)
-                            !rider.commuting -> Chip("$who · 출퇴근 아님", Palette.sub)
-                            rider.paymentLabel == null -> Chip("$who · 결제 미등록", Palette.warn)
-                            else -> Chip("$who · ${rider.paymentLabel}", Palette.ok)
-                        }
+/**
+ * 지금 탄 사람과 좌석 배치도.
+ * 앉았지만 아직 탑승 등록하지 않은 자리는 점선으로 보여 준다. 누르면 그 자리의 QR 을 띄운다
+ * (운전자가 '나중에'로 넘긴 자리를 다시 띄울 때 쓴다).
+ */
+@Composable
+private fun BoardedCard(state: CatMeterSession.State, onPrompt: ((SeatPosition) -> Unit)?) {
+    val passengers = state.passengers
+    val riders = state.riders
+    Card(Modifier.fillMaxWidth(), padding = 16.dp) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (state.seats.isNotEmpty()) SeatMap(state, onPrompt)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("지금 탑승 ${passengers.size}명", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (passengers.isEmpty()) Text("아직 탄 사람이 없어요", color = Palette.sub, fontSize = 15.sp)
+                passengers.forEach { name ->
+                    val rider = riders.firstOrNull { it.name == name }
+                    val who = rider?.seat?.let { "$name · ${it.label}" } ?: name
+                    val (note, color) = when {
+                        rider == null -> "직접 입력" to Palette.sub
+                        !rider.commuting -> "출퇴근 아님" to Palette.sub
+                        rider.paymentLabel == null -> "결제 미등록" to Palette.warn
+                        else -> rider.paymentLabel to Palette.ok
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(who, fontSize = 15.sp, maxLines = 1)
+                        Text(note, color = color, fontSize = 13.sp, maxLines = 1)
+                    }
+                }
+                val waiting = waitingSeats(state)
+                if (waiting.isNotEmpty()) {
+                    Text(
+                        waiting.joinToString(", ") { it.label } + "에 누가 앉았어요. QR을 찍어 주세요",
+                        color = Palette.accent, fontSize = 14.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun waitingSeats(state: CatMeterSession.State): List<SeatPosition> {
+    val assigned = state.riders.mapNotNull { it.seat }.toSet()
+    return state.seats.filter { (seat, signal) -> signal.taken && !seat.isDriver && seat !in assigned }.keys.sorted()
+}
+
+/** 차를 위에서 본 좌석 배치도. 차가 알려 준 자리만 그린다. */
+@Composable
+private fun SeatMap(state: CatMeterSession.State, onPrompt: ((SeatPosition) -> Unit)?) {
+    val known = state.seats.keys + SeatPosition.ROW_1_LEFT
+    val rows = SeatPosition.entries.chunked(3).filter { row -> row.any { it in known } }
+    val bySeat = state.riders.filter { it.seat != null }.associateBy { it.seat }
+    Column(
+        Modifier
+            .width(170.dp)
+            .border(2.dp, Palette.ground, RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        rows.forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { seat ->
+                    val cell = Modifier.weight(1f).height(44.dp)
+                    val rider = bySeat[seat]
+                    when {
+                        seat !in known -> Spacer(cell)
+                        seat.isDriver -> SeatCell("운전", cell.background(Palette.surfaceHigh, SeatShape), Palette.sub)
+                        rider != null -> SeatCell(rider.name, cell.background(Palette.accent, SeatShape), Palette.onAccent, bold = true)
+                        state.seats[seat]?.taken == true -> SeatCell(
+                            "앉음",
+                            cell
+                                .clip(SeatShape)
+                                .then(if (onPrompt != null) Modifier.clickable(onClickLabel = "${seat.label} QR 띄우기") { onPrompt(seat) } else Modifier)
+                                .dashedBorder(Palette.accent),
+                            Palette.accent,
+                        )
+                        else -> Spacer(cell.background(Palette.surfaceHigh, SeatShape))
                     }
                 }
             }
@@ -199,33 +262,32 @@ private fun BoardingInfo(passengers: List<String>, riders: List<BoardingClient.R
     }
 }
 
-/** 앉았지만 아직 탑승 등록하지 않은 자리. 운전자가 '나중에'로 넘긴 자리의 QR 을 다시 띄울 수 있다. */
-@OptIn(ExperimentalLayoutApi::class)
+private val SeatShape = RoundedCornerShape(10.dp)
+
 @Composable
-private fun WaitingSeats(state: CatMeterSession.State, onPrompt: (SeatPosition) -> Unit) {
-    val assigned = state.riders.mapNotNull { it.seat }.toSet()
-    val waiting = state.seats.filter { (seat, signal) -> signal.taken && !seat.isDriver && seat !in assigned }.keys.sorted()
-    if (waiting.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("앉았지만 아직 등록하지 않은 자리", color = Palette.sub, fontSize = 14.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            waiting.forEach { seat ->
-                OutlinedButton(onClick = { onPrompt(seat) }) { Text("${seat.label} QR", fontSize = 15.sp) }
-            }
-        }
+private fun SeatCell(text: String, modifier: Modifier, color: Color, bold: Boolean = false) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Text(text, color = color, fontSize = 12.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
     }
+}
+
+private fun Modifier.dashedBorder(color: Color): Modifier = drawBehind {
+    val stroke = 2.dp.toPx()
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(stroke / 2, stroke / 2),
+        size = Size(size.width - stroke, size.height - stroke),
+        cornerRadius = CornerRadius(10.dp.toPx()),
+        style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))),
+    )
 }
 
 @Composable
 private fun Step(number: String, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            number,
-            color = Palette.bg, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .background(Palette.accent, RoundedCornerShape(50))
-                .padding(horizontal = 9.dp, vertical = 2.dp),
-        )
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.size(28.dp).background(Palette.accent, CircleShape), contentAlignment = Alignment.Center) {
+            Text(number, color = Palette.onAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
         Text(text, fontSize = 16.sp)
     }
 }
