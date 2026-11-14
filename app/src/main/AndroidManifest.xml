@@ -7,6 +7,8 @@
     <uses-permission android:name="pleos.car.permission.CAR_ENERGY" />
     <!-- Pleos Vehicle SDK: 동승석 좌석 점유·안전벨트 착용 조회·구독 → 앉으면 그 자리 탑승 QR. 좌석 제어는 하지 않는다. -->
     <uses-permission android:name="pleos.car.permission.CAR_SEATS" />
+    <!-- Pleos Vehicle SDK: 동승자 쪽 문 열림 조회·구독 → 자리가 비고 문이 열렸을 때만 중간 하차로 판단. 문 제어는 하지 않는다. -->
+    <uses-permission android:name="pleos.car.permission.CAR_DOORS" />
     <!-- Pleos NaviHelper SDK: 목적지·즐겨찾기(집·회사)·현재 위치 조회. 경로를 바꾸지는 않는다. -->
     <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
 

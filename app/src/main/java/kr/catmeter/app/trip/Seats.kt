@@ -51,3 +51,42 @@ object SeatPrompts {
         return kept + added
     }
 }
+
+/** 동승자가 타고 내리는 문. 이름은 Pleos SDK DoorValue 와 같다. 운전석 문(1열 왼쪽)은 쓰지 않는다. */
+enum class DoorPosition {
+    ROW_1_RIGHT, ROW_2_LEFT, ROW_2_RIGHT, ROW_3_LEFT, ROW_3_RIGHT;
+
+    companion object {
+        fun ofName(name: String?): DoorPosition? = entries.firstOrNull { it.name == name }
+    }
+}
+
+/**
+ * 문 하나의 신호.
+ * @param open 지금 열려 있음
+ * @param lastOpenMs 마지막으로 닫힘에서 열림으로 바뀐 시각 (부팅 뒤 흐른 시간). 한 번도 열리지 않았으면 null
+ */
+data class DoorSignal(val open: Boolean, val lastOpenMs: Long? = null)
+
+/** 이 자리에 앉은 사람이 내릴 때 쓰는 문. 가운데 자리와 3열은 양쪽 2열 문으로도 내린다. */
+val SeatPosition.exitDoors: List<DoorPosition>
+    get() = when (this) {
+        SeatPosition.ROW_1_LEFT -> emptyList()
+        SeatPosition.ROW_1_CENTER, SeatPosition.ROW_1_RIGHT -> listOf(DoorPosition.ROW_1_RIGHT)
+        SeatPosition.ROW_2_LEFT -> listOf(DoorPosition.ROW_2_LEFT)
+        SeatPosition.ROW_2_RIGHT -> listOf(DoorPosition.ROW_2_RIGHT)
+        SeatPosition.ROW_2_CENTER -> listOf(DoorPosition.ROW_2_LEFT, DoorPosition.ROW_2_RIGHT)
+        SeatPosition.ROW_3_LEFT -> listOf(DoorPosition.ROW_3_LEFT, DoorPosition.ROW_2_LEFT, DoorPosition.ROW_2_RIGHT)
+        SeatPosition.ROW_3_CENTER -> listOf(DoorPosition.ROW_3_LEFT, DoorPosition.ROW_3_RIGHT, DoorPosition.ROW_2_LEFT, DoorPosition.ROW_2_RIGHT)
+        SeatPosition.ROW_3_RIGHT -> listOf(DoorPosition.ROW_3_RIGHT, DoorPosition.ROW_2_LEFT, DoorPosition.ROW_2_RIGHT)
+    }
+
+/**
+ * 이 자리에서 내리는 문들의 신호를 하나로 합친다.
+ * 차가 그 문들의 신호를 하나도 주지 않으면 null (문 없이 좌석만으로 판단한다).
+ */
+fun SeatPosition.doorSignal(doors: Map<DoorPosition, DoorSignal>): DoorSignal? {
+    val mine = exitDoors.mapNotNull { doors[it] }
+    if (mine.isEmpty()) return null
+    return DoorSignal(open = mine.any { it.open }, lastOpenMs = mine.mapNotNull { it.lastOpenMs }.maxOrNull())
+}
