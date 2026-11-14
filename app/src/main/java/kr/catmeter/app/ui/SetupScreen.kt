@@ -258,8 +258,8 @@ private fun PassengerEditor(session: CatMeterSession, passengers: List<String>, 
 }
 
 /**
- * 출발 전 예상 냥. 내비에서 목적지를 찍으면 자동으로 잡힌다.
- * 예상 요금 = 미터(내비 예상 거리·시간) + 주유비·충전비. 통행료는 넣지 않는다.
+ * 출발 전 예상 실비. 내비에서 목적지를 찍으면 자동으로 잡힌다.
+ * 실비 = 주유비·충전비 (내비 예상 거리 기준). 운전자를 포함해 나눈다. 통행료·주차비는 넣지 못한다.
  */
 @Composable
 private fun EstimateCard(state: CatMeterSession.State, car: CarView) {
@@ -268,8 +268,8 @@ private fun EstimateCard(state: CatMeterSession.State, car: CarView) {
         val dest = car.destination
         if (dest == null) {
             Text(
-                if (car.navi is NaviSource.Status.Ready) "내비에서 목적지를 찍으면 예상 냥을 미리 보여 드려요"
-                else "내비와 연결되지 않아 예상 냥을 계산할 수 없어요",
+                if (car.navi is NaviSource.Status.Ready) "내비에서 목적지를 찍으면 나눌 실비를 미리 보여 드려요"
+                else "내비와 연결되지 않아 예상 실비를 계산할 수 없어요",
                 fontSize = 16.sp,
             )
             return@Card
@@ -280,14 +280,15 @@ private fun EstimateCard(state: CatMeterSession.State, car: CarView) {
             fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2,
         )
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("예상", color = Palette.sub, fontSize = 15.sp, modifier = Modifier.padding(bottom = 5.dp))
-            BigValue(formatNyang(bill.totalNyang), "냥", 30.sp, Palette.accent)
+            Text("예상 실비", color = Palette.sub, fontSize = 15.sp, modifier = Modifier.padding(bottom = 5.dp))
+            BigValue(formatNyang(bill.costWon), "원", 30.sp, Palette.accent)
         }
         Text(
-            "미터 ${formatNyang(bill.meter.totalNyang)} + ${bill.energy.kind.label} ${formatNyang(bill.energyNyang)}" +
-                (bill.perPassenger(state.passengers.size)?.let { " · 동승자 1인당 약 ${formatNyang(it)}냥" } ?: ""),
+            "${bill.energy.kind.label} ${energyBasis(bill)}" +
+                (bill.perPerson(state.passengers.size)?.let { " · 운전자 포함 1인당 약 ${formatNyang(it)}원" } ?: " · 운전자도 함께 나눠 내요"),
             color = Palette.sub, fontSize = 14.sp,
         )
+        Text("냥 기록은 약 ${formatNyang(bill.meterNyang)}냥 (결제와 무관)", color = Palette.sub, fontSize = 13.sp)
         val preview = CommuteRule.check(
             start = LocalDateTime.now(SEOUL),
             end = LocalDateTime.now(SEOUL).plusSeconds(dest.remainTimeS.toLong()),
@@ -300,7 +301,7 @@ private fun EstimateCard(state: CatMeterSession.State, car: CarView) {
         if (preview.eligible) {
             Text("${preview.window?.label} 함께 타기 · 도착하면 자동으로 정산해요", color = Palette.accent, fontSize = 14.sp)
         } else {
-            Text("결제 없이 냥만 표시돼요 · ${preview.reasons.first()}", color = Palette.warn, fontSize = 14.sp)
+            Text("결제 없이 기록만 남겨요 · ${preview.reasons.first()}", color = Palette.warn, fontSize = 14.sp)
         }
     }
 }

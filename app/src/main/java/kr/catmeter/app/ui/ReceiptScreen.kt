@@ -146,21 +146,22 @@ private fun ReceiptCard(record: TripRecord, layer: GraphicsLayer) {
         Dashed()
         val bill = record.bill
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Text("합계", color = Palette.paperSub, fontSize = 17.sp, modifier = Modifier.weight(1f))
-            Text("${formatNyang(bill.totalNyang)}", color = Palette.paperInk, fontSize = 34.sp, fontWeight = FontWeight.Bold, fontFamily = mono)
+            Text("달린 기록", color = Palette.paperSub, fontSize = 17.sp, modifier = Modifier.weight(1f))
+            Text("${formatNyang(bill.meterNyang)}", color = Palette.paperInk, fontSize = 34.sp, fontWeight = FontWeight.Bold, fontFamily = mono)
             Text(" 냥", color = Palette.paperSub, fontSize = 17.sp, modifier = Modifier.padding(bottom = 5.dp))
         }
-        if (record.joins.isEmpty() && record.leaves.isEmpty()) {
-            bill.perPassenger(record.passengers.size)?.let { BigLine("1인당", "${formatNyang(it)}냥") }
-        } else {
-            val amounts = record.shares.values
-            BigLine("나눠 낼 금액", "${formatNyang(amounts.min())}~${formatNyang(amounts.max())}냥")
+        // 결제는 냥이 아니라 실비만, 운전자까지 포함해 나눈다
+        BigLine("${bill.energy.kind.label} (실비)", "${formatNyang(bill.costWon)}원")
+        val amounts = record.shares.filterKeys { it !in record.notSharing }.values
+        if (amounts.isNotEmpty()) {
+            if (amounts.min() == amounts.max()) BigLine("1인당 (운전자 포함)", "${formatNyang(amounts.max())}원")
+            else BigLine("나눠 낼 금액", "${formatNyang(amounts.min())}~${formatNyang(amounts.max())}원")
         }
         Text(
             when {
                 record.settledAtMs != null -> "${record.commute.window?.label} 함께 타기 · 자동결제 완료(테스트)"
                 record.commute.eligible -> "${record.commute.window?.label} 함께 타기 · 정산 가능"
-                else -> "결제 없는 냥 기록"
+                else -> "결제 없는 기록"
             },
             color = Palette.paperSub, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), textAlign = TextAlign.End,
         )

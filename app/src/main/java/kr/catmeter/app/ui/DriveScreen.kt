@@ -81,7 +81,7 @@ fun DriveScreen(session: CatMeterSession, state: CatMeterSession.State, car: Car
 }
 
 /**
- * 합계 냥을 크게, 아래에 거리·시간·주유비(충전비) 냥과 실제 값.
+ * 기록용 냥(거리 + 시간)을 크게, 그 아래에 나눌 실비. 맨 아래에 거리·시간 냥과 주유비(충전비).
  * 고양이는 정차 중에만 보이는 정지 그림이다 (애니메이션 없음). 움직이기 시작하면 빠져 렌더링도 멈춘다.
  * @param compact 좁은 창(내비 옆). 목적지 카드가 따로 없으므로 남은 거리를 여기에 적고, 글자를 줄인다.
  */
@@ -97,7 +97,7 @@ private fun MeterCard(
 ) {
     Card(modifier, padding = if (compact) 16.dp else 22.dp, gap = 4.dp) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("지금까지", color = Palette.sub, fontSize = 16.sp, maxLines = 1)
+            Text("지금까지 달린 기록", color = Palette.sub, fontSize = 16.sp, maxLines = 1)
             if (showCat) {
                 val activity = CatActivity.of(parked = car.parked == true)
                 Text(
@@ -111,8 +111,15 @@ private fun MeterCard(
                 )
             }
         }
-        BigValue(formatNyang(bill.totalNyang), "냥", if (compact) 64.sp else 84.sp, Palette.accent)
-        Text("1냥 = 1원", color = Palette.sub, fontSize = 13.sp, maxLines = 1)
+        BigValue(formatNyang(bill.meterNyang), "냥", if (compact) 64.sp else 84.sp, Palette.accent)
+        // 냥은 기록일 뿐이고, 결제는 실비(주유비·충전비)만 운전자까지 포함해 나눈다
+        val sharing = state.passengers.count { it !in state.alights && it !in state.notSharing }
+        Text(
+            "나눌 실비 ${formatNyang(bill.costWon)}원" +
+                (bill.perPerson(sharing)?.let { " · 지금 인원이면 운전자 포함 1인당 약 ${formatNyang(it)}원" } ?: ""),
+            fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 2,
+        )
+        Text("냥은 기록이에요. 결제는 실비만 나눠요", color = Palette.sub, fontSize = 13.sp, maxLines = 1)
         if (compact) {
             car.destination?.let { d ->
                 Text("${d.name}까지 ${formatKm(d.remainKm)} km · 약 ${formatDuration(d.remainTimeS * 1000L)}", color = Palette.sub, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -128,9 +135,9 @@ private fun MeterCard(
         }
         val valueSize = if (compact) 18.sp else 24.sp
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Metric("거리", bill.meter.distanceNyang, "${formatKm(live.distanceKm)} km", valueSize, Modifier.weight(1f))
-            Metric("시간", bill.meter.timeNyang, formatDuration(live.elapsedMs), valueSize, Modifier.weight(1f))
-            Metric(bill.energy.kind.label, bill.energyNyang, energyBasis(bill), valueSize, Modifier.weight(1f))
+            Metric("거리", bill.meter.distanceNyang, "냥", "${formatKm(live.distanceKm)} km", valueSize, Modifier.weight(1f))
+            Metric("시간", bill.meter.timeNyang, "냥", formatDuration(live.elapsedMs), valueSize, Modifier.weight(1f))
+            Metric("${bill.energy.kind.label} (실비)", bill.energyWon, "원", energyBasis(bill), valueSize, Modifier.weight(1f))
         }
     }
 }
@@ -141,9 +148,9 @@ fun energyBasis(bill: TripBill): String {
     return String.format(java.util.Locale.KOREA, "%.1f km/%s", e.kmPerUnit, e.kind.unit) + if (e.fromVehicle) "" else " (기본값)"
 }
 
-/** 냥 값과 그 근거가 된 실제 값 */
+/** 값(냥 또는 원)과 그 근거가 된 실제 값 */
 @Composable
-private fun Metric(label: String, nyang: Int, actual: String, size: TextUnit, modifier: Modifier) {
+private fun Metric(label: String, nyang: Int, unit: String, actual: String, size: TextUnit, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(label, color = Palette.sub, fontSize = 13.sp, maxLines = 1)
         Row(verticalAlignment = Alignment.Bottom) {
@@ -151,7 +158,7 @@ private fun Metric(label: String, nyang: Int, actual: String, size: TextUnit, mo
                 formatNyang(nyang), fontSize = size, fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
             )
-            Text(" 냥", color = Palette.sub, fontSize = 13.sp, maxLines = 1, modifier = Modifier.padding(bottom = 2.dp))
+            Text(" $unit", color = Palette.sub, fontSize = 13.sp, maxLines = 1, modifier = Modifier.padding(bottom = 2.dp))
         }
         // 좁은 창에서도 "(기본값)"까지 보이게 두 줄까지 쓴다
         Text(actual, color = Palette.sub, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)

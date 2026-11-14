@@ -28,7 +28,7 @@ enum class CommuteWindow(val label: String, val from: LocalTime, val to: LocalTi
     fun contains(t: LocalTime) = !t.isBefore(from) && !t.isAfter(to)
 }
 
-/** 출퇴근 함께 타기 판정 결과. eligible 이 아니면 결제 없이 냥만 보여 준다. */
+/** 출퇴근 함께 타기 판정 결과. eligible 이 아니면 결제 없이 기록만 남긴다. */
 data class CommuteCheck(
     val eligible: Boolean,
     val window: CommuteWindow?,
