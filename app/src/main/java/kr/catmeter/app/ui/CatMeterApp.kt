@@ -171,14 +171,14 @@ private fun StatusStrip(car: CarView, compact: Boolean, onRequestSpeedPermission
 }
 
 @Composable
-fun Chip(text: String, color: Color) {
+fun Chip(text: String, color: Color, background: Color = Palette.surface) {
     Text(
         text,
         color = color,
         fontSize = 13.sp,
         maxLines = 1,
         modifier = Modifier
-            .background(Palette.surface, RoundedCornerShape(50))
+            .background(background, RoundedCornerShape(50))
             .padding(horizontal = 12.dp, vertical = 5.dp),
     )
 }

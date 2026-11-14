@@ -4,14 +4,12 @@ import kr.catmeter.app.ui.cat3d.Cat3D
 import kr.catmeter.app.ui.cat3d.CatPose
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,15 +18,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.InputChip
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,10 +36,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -79,12 +74,18 @@ fun SetupScreen(session: CatMeterSession, state: CatMeterSession.State, car: Car
         }
     }
     val buttons = @Composable {
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinePill("탑승 QR 띄우기", { showBoardingQr = true }, Modifier.weight(1f).height(ButtonHeight), enabled = !locked)
-            PrimaryPill(
-                if (locked) "정차 후 출발할 수 있어요" else "출발!",
-                session::startTrip, Modifier.weight(if (wide) 2f else 1f).height(ButtonHeight), enabled = !locked,
-            )
+        val startLabel = if (locked) "정차 후 출발할 수 있어요" else "출발!"
+        if (wide) {
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinePill("탑승 QR 띄우기", { showBoardingQr = true }, Modifier.weight(1f).height(ButtonHeight), enabled = !locked)
+                PrimaryPill(startLabel, session::startTrip, Modifier.weight(2f).height(ButtonHeight), enabled = !locked)
+            }
+        } else {
+            // 좁은 창: 글자가 잘리지 않게 세로로 쌓는다
+            Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PrimaryPill(startLabel, session::startTrip, Modifier.fillMaxWidth().height(ButtonHeight), enabled = !locked)
+                OutlinePill("탑승 QR 띄우기", { showBoardingQr = true }, Modifier.fillMaxWidth().height(ButtonHeight), enabled = !locked)
+            }
         }
     }
 
@@ -140,24 +141,40 @@ private fun SetupFields(session: CatMeterSession, state: CatMeterSession.State, 
                 )
             }
             LabeledRow("털 색") {
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                // 좁은 창에서는 다음 줄로 넘긴다
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.alpha(if (locked) LOCKED_ALPHA else 1f),
+                ) {
                     Fur.entries.forEach { fur ->
                         val selected = state.cat.fur == fur
-                        Box(
+                        Column(
                             Modifier
-                                .size(44.dp)
-                                .border(if (selected) 3.dp else 0.dp, if (selected) Palette.accent else Color.Transparent, CircleShape)
-                                .padding(6.dp)
-                                .background(Color(fur.main), CircleShape)
-                                .clip(CircleShape)
-                                .clickable(enabled = !locked, onClickLabel = fur.label, role = Role.RadioButton) { session.setFur(fur) }
-                                .semantics { contentDescription = fur.label },
-                        )
+                                .clip(RowShape)
+                                .selectable(selected = selected, enabled = !locked, role = Role.RadioButton) { session.setFur(fur) }
+                                .padding(4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(44.dp)
+                                    .border(3.dp, if (selected) Palette.accent else Color.Transparent, CircleShape)
+                                    .padding(6.dp)
+                                    .background(Color(fur.main), CircleShape)
+                                    // 어두운 털 색도 카드 위에서 보이게 가는 테두리를 두른다
+                                    .border(1.dp, Palette.sub, CircleShape),
+                            )
+                            Text(fur.label, color = if (selected) Palette.text else Palette.sub, fontSize = 12.sp, maxLines = 1)
+                        }
                     }
                 }
             }
             LabeledRow("소품") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.alpha(if (locked) LOCKED_ALPHA else 1f),
+                ) {
                     Accessory.entries.forEach { a ->
                         val selected = a in state.cat.accessories
                         Text(
@@ -167,7 +184,7 @@ private fun SetupFields(session: CatMeterSession, state: CatMeterSession.State, 
                             modifier = Modifier
                                 .clip(PillShape)
                                 .background(if (selected) Palette.accent else Palette.surfaceHigh)
-                                .clickable(enabled = !locked, role = Role.Checkbox) { session.toggleAccessory(a) }
+                                .toggleable(value = selected, enabled = !locked, role = Role.Checkbox) { session.toggleAccessory(a) }
                                 .padding(horizontal = 16.dp, vertical = 10.dp),
                         )
                     }
@@ -181,9 +198,15 @@ private fun SetupFields(session: CatMeterSession, state: CatMeterSession.State, 
             PassengerEditor(session, state.passengers, locked)
         }
 
-        Text("출발을 누르지 않아도 차가 움직이고 3초 뒤 자동으로 시작해요", color = Palette.sub, fontSize = 13.sp)
+        // 자동 시작은 내비가 목적지를 안내하고 있을 때만 된다
+        if (car.destination != null) {
+            Text("출발을 누르지 않아도 차가 움직이고 3초 뒤 자동으로 시작해요", color = Palette.sub, fontSize = 13.sp)
+        }
     }
 }
+
+/** 주행 제한으로 잠긴 꾸미기 항목의 투명도 */
+private const val LOCKED_ALPHA = 0.4f
 
 @Composable
 private fun LabeledRow(label: String, content: @Composable () -> Unit) {
