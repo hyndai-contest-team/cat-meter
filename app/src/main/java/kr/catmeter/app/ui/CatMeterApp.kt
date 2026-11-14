@@ -133,8 +133,8 @@ private fun StatusStrip(car: CarView, compact: Boolean, onRequestSpeedPermission
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         when (val s = car.speed) {
@@ -175,10 +175,10 @@ fun Chip(text: String, color: Color) {
     Text(
         text,
         color = color,
-        fontSize = 12.sp,
+        fontSize = 13.sp,
         maxLines = 1,
         modifier = Modifier
-            .background(color.copy(alpha = 0.12f), RoundedCornerShape(50))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .background(Palette.surface, RoundedCornerShape(50))
+            .padding(horizontal = 12.dp, vertical = 5.dp),
     )
 }

@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,19 +26,13 @@ import kr.catmeter.app.trip.TripRecord
  */
 @Composable
 fun SettlePanel(session: CatMeterSession, record: TripRecord, autoPay: CatMeterSession.AutoPay) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(Palette.surface, RoundedCornerShape(16.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    Card(Modifier.fillMaxWidth()) {
         val commute = record.commute
         if (!commute.eligible) {
             Text("결제 없이 냥만 표시해요", fontSize = 17.sp, fontWeight = FontWeight.Bold)
             commute.reasons.forEach { Text("· $it", color = Palette.sub, fontSize = 14.sp) }
             Text("출퇴근 시간대에 집 ↔ 회사를 함께 탄 경우에만 정산할 수 있어요.", color = Palette.sub, fontSize = 13.sp)
-            return@Column
+            return@Card
         }
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -63,9 +55,9 @@ fun SettlePanel(session: CatMeterSession, record: TripRecord, autoPay: CatMeterS
             CatMeterSession.AutoPay.Charging -> Text("자동결제 중이에요…", color = Palette.sub, fontSize = 15.sp)
             is CatMeterSession.AutoPay.Failed -> {
                 Text(autoPay.reason, color = Palette.warn, fontSize = 15.sp)
-                OutlinedButton(onClick = session::chargeRiders) { Text("다시 결제하기", fontSize = 16.sp) }
+                OutlinePill("다시 결제하기", session::chargeRiders)
             }
-            is CatMeterSession.AutoPay.Done -> autoPay.charges.forEach { ChargeRow(it) }
+            is CatMeterSession.AutoPay.Done -> autoPay.charges.forEachIndexed { i, c -> ChargeRow(c, i, record) }
         }
 
         Text(
@@ -75,16 +67,27 @@ fun SettlePanel(session: CatMeterSession, record: TripRecord, autoPay: CatMeterS
     }
 }
 
+/** 한 사람의 결제 결과: 탄 구간, 금액, 상태 */
 @Composable
-private fun ChargeRow(charge: BoardingClient.Charge) {
-    val (text, color) = when (charge.status) {
-        BoardingClient.Charge.Status.PAID -> "${formatNyang(charge.amount)}원 · ${charge.methodLabel ?: "결제 수단"} 결제됨" to Palette.ok
-        BoardingClient.Charge.Status.NO_METHOD -> "${formatNyang(charge.amount)}원 · 결제 수단 미등록 · 직접 받아 주세요" to Palette.warn
+private fun ChargeRow(charge: BoardingClient.Charge, index: Int, record: TripRecord) {
+    val (status, color) = when (charge.status) {
+        BoardingClient.Charge.Status.PAID -> "${charge.methodLabel ?: "결제 수단"} 결제됨" to Palette.ok
+        BoardingClient.Charge.Status.NO_METHOD -> "결제 수단 미등록 · 직접 받아 주세요" to Palette.warn
         BoardingClient.Charge.Status.NOT_COMMUTING -> "출퇴근 길 아님 · 결제 없이 냥만" to Palette.sub
-        BoardingClient.Charge.Status.NOT_BOARDED -> "${formatNyang(charge.amount)}원 · QR로 타지 않음 · 직접 받아 주세요" to Palette.warn
+        BoardingClient.Charge.Status.NOT_BOARDED -> "QR로 타지 않음 · 직접 받아 주세요" to Palette.warn
     }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(charge.name, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Text(text, color = color, fontSize = 15.sp)
+    val from = record.joins[charge.name]?.distanceKm ?: 0f
+    val leave = record.leaves[charge.name]
+    val to = leave?.distanceKm ?: record.distanceKm
+    val section = "${formatKm(from)} → ${formatKm(to)} km" +
+        (if (charge.name in record.joins) " · 중간 탑승" else "") +
+        (if (leave != null) " · 먼저 내림" else "")
+    Column(Modifier.fillMaxWidth().background(Palette.surfaceHigh, RowShape)) {
+        PersonRow(charge.name, index, detail = section, modifier = Modifier.fillMaxWidth()) {
+            if (charge.status != BoardingClient.Charge.Status.NOT_COMMUTING) {
+                BigValue(formatNyang(charge.amount), "원", 22.sp, unitColor = Palette.sub)
+            }
+        }
+        Text(status, color = color, fontSize = 13.sp, modifier = Modifier.padding(start = 60.dp, end = 12.dp, bottom = 10.dp))
     }
 }
