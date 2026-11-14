@@ -2,6 +2,7 @@ package kr.catmeter.app.trip
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TripBillTest {
@@ -9,46 +10,65 @@ class TripBillTest {
     private val fuel = EnergyProfile(EnergyKind.FUEL, kmPerUnit = 12f, wonPerUnit = 1_700, fromVehicle = true)
 
     @Test
-    fun `total is meter plus energy cost`() {
-        // 24km, 30분: 거리 2,400 + 시간 300 + 주유비 24/12*1700 = 3,400
+    fun `cost to share is the energy cost only and the meter is a record`() {
+        // 24km, 30분: 주유비 24/12*1700 = 3,400원. 거리 2,400냥 + 시간 300냥은 기록용
         val b = TripBill.of(24f, 30 * 60_000L, fuel)
+        assertEquals(3_400, b.energyWon)
+        assertEquals(3_400, b.costWon)
         assertEquals(2_400, b.meter.distanceNyang)
         assertEquals(300, b.meter.timeNyang)
-        assertEquals(3_400, b.energyNyang)
-        assertEquals(6_100, b.totalNyang)
+        assertEquals(2_700, b.meterNyang)
     }
 
     @Test
-    fun `per passenger rounds up to 10 nyang and needs a passenger`() {
-        val b = TripBill.of(24f, 30 * 60_000L, fuel)   // 6,100
-        assertEquals(2_040, b.perPassenger(3))           // 2,033.3 → 2,040
-        assertEquals(6_100, b.perPassenger(1))
-        assertNull(b.perPassenger(0))
+    fun `per person counts the driver and drops fractions of a won`() {
+        val b = TripBill.of(24f, 30 * 60_000L, fuel)   // 3,400원
+        assertEquals(850, b.perPerson(3))                // 3,400 / 4
+        assertEquals(1_700, b.perPerson(1))              // 운전자와 둘이 나눔
+        assertEquals(1_133, b.perPerson(2))              // 1,133.3 → 1,133
+        assertNull(b.perPerson(0))
     }
 
-    // 24km, 30분 = 6,100냥. 12km·15분 지점까지 누적 요금 = 1,200 + 150 + 1,700 = 3,050냥
+    // 24km = 3,400원. 12km 지점까지 누적 실비 = 1,700원
     private val half = JoinPoint(12f, 15 * 60_000L)
 
     @Test
-    fun `shares without mid joins equal per passenger`() {
-        val s = TripBill.shares(24f, 30 * 60_000L, fuel, listOf("A", "B", "C"), emptyMap())
-        assertEquals(mapOf("A" to 2_040, "B" to 2_040, "C" to 2_040), s)
+    fun `driver takes an equal share with the passengers`() {
+        val s = TripBill.split(24f, 30 * 60_000L, fuel, listOf("A", "B", "C"), emptyMap())
+        assertEquals(mapOf("A" to 850, "B" to 850, "C" to 850), s.passengers)
+        assertEquals(850, s.driverWon)
+    }
+
+    @Test
+    fun `one passenger and the driver split in half`() {
+        val s = TripBill.split(24f, 30 * 60_000L, fuel, listOf("A"), emptyMap())
+        assertEquals(mapOf("A" to 1_700), s.passengers)
+        assertEquals(1_700, s.driverWon)
     }
 
     @Test
     fun `mid join pays only the segment after boarding`() {
-        // 앞 구간 3,050 → A·B 가 1,525씩, 뒤 구간 3,050 → A·B·C 가 1,016.7씩
-        val s = TripBill.shares(24f, 30 * 60_000L, fuel, listOf("A", "B", "C"), mapOf("C" to half))
-        assertEquals(2_550, s["A"])   // 2,541.7 → 2,550
-        assertEquals(2_550, s["B"])
-        assertEquals(1_020, s["C"])   // 1,016.7 → 1,020
+        // 앞 구간 1,700 → A·B·운전자가 566.7씩, 뒤 구간 1,700 → A·B·C·운전자가 425씩
+        val s = TripBill.split(24f, 30 * 60_000L, fuel, listOf("A", "B", "C"), mapOf("C" to half))
+        assertEquals(991, s.passengers["A"])     // 991.7 → 991
+        assertEquals(991, s.passengers["B"])
+        assertEquals(425, s.passengers["C"])
+        assertEquals(993, s.driverWon)           // 3,400 − 991 − 991 − 425 (버린 끝전은 운전자가 낸다)
     }
 
     @Test
     fun `segment with nobody on board is the driver's`() {
-        // 앞 구간에는 동승자가 없어 운전자 몫, C 는 뒤 구간 3,050 만 낸다
-        val s = TripBill.shares(24f, 30 * 60_000L, fuel, listOf("C"), mapOf("C" to half))
-        assertEquals(mapOf("C" to 3_050), s)
+        // 앞 구간 1,700 은 운전자 몫, 뒤 구간 1,700 은 C 와 운전자가 반씩
+        val s = TripBill.split(24f, 30 * 60_000L, fuel, listOf("C"), mapOf("C" to half))
+        assertEquals(mapOf("C" to 850), s.passengers)
+        assertEquals(2_550, s.driverWon)
+    }
+
+    @Test
+    fun `no passengers means the driver bears everything`() {
+        val s = TripBill.split(24f, 30 * 60_000L, fuel, emptyList(), emptyMap())
+        assertEquals(emptyMap<String, Int>(), s.passengers)
+        assertEquals(3_400, s.driverWon)
     }
 
     @Test
@@ -56,17 +76,17 @@ class TripBillTest {
         val end = JoinPoint(24f, 30 * 60_000L)
         val s = TripBill.shares(24f, 30 * 60_000L, fuel, listOf("A", "Z"), mapOf("Z" to JoinPoint(30f, 40 * 60_000L)))
         assertEquals(0, s["Z"])
-        assertEquals(6_100, s["A"])
+        assertEquals(1_700, s["A"])
         assertEquals(0, TripBill.shares(24f, 30 * 60_000L, fuel, listOf("Z"), mapOf("Z" to end))["Z"])
-        assertEquals(emptyMap<String, Int>(), TripBill.shares(24f, 30 * 60_000L, fuel, emptyList(), emptyMap()))
     }
 
     @Test
     fun `early leaver pays only until getting off`() {
-        // A 는 12km·15분에 내림: 앞 구간 3,050 을 A·B 가 1,525씩, 뒤 구간 3,050 은 B 혼자
-        val s = TripBill.shares(24f, 30 * 60_000L, fuel, listOf("A", "B"), emptyMap(), mapOf("A" to half))
-        assertEquals(1_530, s["A"])   // 1,525 → 1,530
-        assertEquals(4_580, s["B"])   // 1,525 + 3,050 = 4,575 → 4,580
+        // A 는 12km 에 내림: 앞 구간 1,700 을 A·B·운전자가 566.7씩, 뒤 구간 1,700 은 B·운전자가 850씩
+        val s = TripBill.split(24f, 30 * 60_000L, fuel, listOf("A", "B"), emptyMap(), mapOf("A" to half))
+        assertEquals(566, s.passengers["A"])     // 566.7 → 566
+        assertEquals(1_416, s.passengers["B"])   // 1,416.7 → 1,416
+        assertEquals(1_418, s.driverWon)
     }
 
     @Test
@@ -86,8 +106,25 @@ class TripBillTest {
             24f, 30 * 60_000L, fuel, listOf("M"),
             mapOf("M" to JoinPoint(6f, 7 * 60_000L + 30_000L)), mapOf("M" to JoinPoint(18f, 22 * 60_000L + 30_000L)),
         )
-        // 6km·7.5분 = 600+70+850 = 1,520 / 18km·22.5분 = 1,800+220+2,550 = 4,570 → 3,050
-        assertEquals(mapOf("M" to 3_050), s)
+        // 6km = 850원, 18km = 2,550원 → 가운데 1,700원을 M 과 운전자가 반씩
+        assertEquals(mapOf("M" to 850), s)
+    }
+
+    @Test
+    fun `someone not on a commute is left out and the rest split with the driver`() {
+        // B 는 출퇴근 길이 아니다: 3,400 을 A 와 운전자가 반씩, B 는 0
+        val s = TripBill.split(24f, 30 * 60_000L, fuel, listOf("A", "B"), emptyMap(), notSharing = setOf("B"))
+        assertEquals(mapOf("A" to 1_700, "B" to 0), s.passengers)
+        assertEquals(1_700, s.driverWon)
+    }
+
+    @Test
+    fun `what the passengers and the driver pay adds up exactly to the cost`() {
+        val s = TripBill.split(23.7f, 41 * 60_000L, fuel, listOf("A", "B", "C"), mapOf("C" to JoinPoint(7.3f, 9 * 60_000L)), mapOf("A" to JoinPoint(15.1f, 25 * 60_000L)))
+        val cost = TripBill.of(23.7f, 41 * 60_000L, fuel).costWon
+        // 동승자들이 낸 돈이 실비를 넘지 않고, 운전자 몫까지 더하면 정확히 실비다
+        assertEquals(cost, s.passengers.values.sum() + s.driverWon)
+        assertTrue(s.passengers.values.sum() < cost)
     }
 
     @Test
