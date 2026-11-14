@@ -16,6 +16,7 @@ object Palette {
     val text = Color(0xFFF2F4F7)
     val sub = Color(0xFF9AA4B2)
     val accent = Color(0xFFF4B860)
+    val onAccent = Color(0xFF2B1D07)
     val ok = Color(0xFF7FD1A8)
     val warn = Color(0xFFF2A65A)
     val paper = Color(0xFFFFFBF2)
@@ -28,7 +29,7 @@ fun CatMeterTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Palette.accent,
-            onPrimary = Color(0xFF2B1D07),
+            onPrimary = Palette.onAccent,
             background = Palette.bg,
             surface = Palette.surface,
             surfaceVariant = Palette.surfaceHigh,
