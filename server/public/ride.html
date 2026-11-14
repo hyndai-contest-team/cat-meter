@@ -111,7 +111,7 @@
       <label class="check" for="commuting">
         <input id="commuting" type="checkbox">
         <span>지금 출근·퇴근하는 길이에요
-          <small>돈을 나눠 내는 카풀은 평일 출퇴근 때만 할 수 있어요. 아니면 결제 없이 냥만 표시돼요.</small>
+          <small>기름값·충전비를 운전자와 함께 나눠 내는 카풀은 평일 출퇴근 때만 할 수 있어요. 아니면 결제 없이 기록만 남아요.</small>
         </span>
       </label>
       <p class="error" id="join-error" role="alert"></p>
@@ -339,7 +339,7 @@
     const where = me.seat ? `${SEAT_LABELS[me.seat]} · ` : '';
     $('done-lead').textContent = me.commuting
       ? `${where}${me.name}님, 차 화면에 이름이 떴는지 확인해 주세요.`
-      : `${where}${me.name}님, 출퇴근 길이 아니라서 결제 없이 냥만 표시돼요.`;
+      : `${where}${me.name}님, 출퇴근 길이 아니라서 결제 없이 기록만 남아요.`;
     $('receipt').hidden = !me.commuting;
     $('receipt-method').textContent = me.payment ? me.payment.label : '-';
     const paid = me.charge && me.charge.status === 'paid';

@@ -89,6 +89,7 @@ class CatMeterStore(context: Context) {
         .put("settledAt", t.settledAtMs)
         .put("joins", pointsJson(t.joins))
         .put("leaves", pointsJson(t.leaves))
+        .put("notSharing", JSONArray(t.notSharing.toList()))
 
     private fun tripFrom(o: JSONObject) = TripRecord(
         id = o.getLong("id"),
@@ -126,6 +127,7 @@ class CatMeterStore(context: Context) {
         settledAtMs = if (o.has("settledAt") && !o.isNull("settledAt")) o.getLong("settledAt") else null,
         joins = pointsFrom(o.optJSONObject("joins")),
         leaves = pointsFrom(o.optJSONObject("leaves")),
+        notSharing = o.optJSONArray("notSharing")?.strings()?.toSet() ?: emptySet(),
     )
 
     private fun pointsJson(points: Map<String, JoinPoint>) = JSONObject().apply {

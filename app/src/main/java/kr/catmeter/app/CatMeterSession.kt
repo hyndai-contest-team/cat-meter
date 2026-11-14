@@ -93,6 +93,12 @@ class CatMeterSession(context: Context) {
     ) {
         /** 먼저 내린 사람의 하차 지점 */
         val leaves: Map<String, JoinPoint> get() = alights.mapValues { it.value.point }
+
+        /**
+         * 실비를 나누는 인원에 넣지 않는 사람: 탈 때 휴대폰에서 출퇴근 길이 아니라고 고른 사람.
+         * 그 사람 몫은 나머지 사람과 운전자가 나눈다. 탑승 QR 없이 이름만 넣은 사람은 인원에 넣는다 (금액만 보여 주고 직접 받는다).
+         */
+        val notSharing: Set<String> get() = riders.filter { !it.commuting && it.name in passengers }.map { it.name }.toSet()
     }
 
     /** 먼저 내린 사람. 하차 지점은 자리가 빈 순간이다. */
@@ -471,7 +477,7 @@ class CatMeterSession(context: Context) {
         }
         val st = _state.value
         val snap = tr.snapshot(now())
-        val amount = TripBill.shares(snap.distanceKm, snap.elapsedMs, st.energy, st.passengers, st.midJoins, st.leaves)[name]
+        val amount = TripBill.shares(snap.distanceKm, snap.elapsedMs, st.energy, st.passengers, st.midJoins, st.leaves, st.notSharing)[name]
             ?: return setAlight(name) { it.copy(status = AlightStatus.AT_ARRIVAL) }
         setAlight(name) { it.copy(status = AlightStatus.CHARGING) }
         val code = st.boardingCode
@@ -539,6 +545,7 @@ class CatMeterSession(context: Context) {
             passengers = st.passengers,
             joins = st.midJoins.filterKeys { it in st.passengers },
             leaves = st.leaves.filterKeys { it in st.passengers },
+            notSharing = st.notSharing,
             rideNumber = st.pastRides + 1,
             energy = st.energy,
             destinationName = st.destinationName ?: navi.destination.value?.name,
