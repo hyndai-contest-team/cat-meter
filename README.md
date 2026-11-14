@@ -50,6 +50,8 @@
 | 전비·연비 | Pleos Vehicle `EvBattery.getCumulativeEvEfficiency` / `Fuel.getCumulativeFuelEconomy` | `pleos.car.permission.CAR_ENERGY` |
 | 목적지·집·회사·현재 위치 | Pleos NaviHelper `getDestinationInfo` / `onRouteStarted` / `getBookmarkInfo`(HOME·OFFICE) / `getCurrentLocationInfo` | `pleos.car.permission.NAVI_ROUTE` |
 | 기어(P 판단) | Pleos Vehicle `Gear.getCurrentGearSelectionState` / `registerGearSelection` | `pleos.car.permission.CAR_DRIVE` |
+| 좌석 점유·안전벨트 착용 | Pleos Vehicle `Seat.registerSeatOccupancy` / `registerSeatBeltBuckledState` | `pleos.car.permission.CAR_SEATS` |
+| 문 열림 | Pleos Vehicle `Door.checkDoorPositionCapabilities` / `registerDoorPosition` | `pleos.car.permission.CAR_DOORS` |
 
 차량 제어 API는 쓰지 않습니다.
 
@@ -102,12 +104,21 @@ PC에서 8088 포트를 다른 프로그램이 쓰고 있지 않은지도 확인
 **좌석으로 탑승·하차 자동 판단**
 - **탈 때:** 동승석에 새로 앉으면(안전벨트 착용 또는 좌석 점유) 차가 서 있을 때 그 자리 탑승 QR(예: "조수석 탑승 QR")이 자동으로 뜹니다. 탑승 등록이 끝나면 닫히고, 운전자는 "이 자리는 나중에"로 넘길 수 있습니다. 넘긴 자리는 일반 탑승 QR 화면의 "앉았지만 아직 등록하지 않은 자리"에서 다시 띄울 수 있습니다. 같은 휴대폰이 다른 자리 QR을 찍으면 자리 이동으로 처리합니다.
 - **함께 탈 때 (자리 고르기):** 출발 전에 두 명 이상이 함께 앉으면 자리별 QR 대신 QR 하나를 띄웁니다. 휴대폰에서 QR을 찍으면 차 좌석 배치도가 먼저 나오고, **사람이 앉아 있고 아직 아무도 고르지 않은 자리만** 누를 수 있습니다. 자리를 고른 뒤 이름·결제 수단을 넣습니다. 같은 자리를 먼저 고른 사람이 있으면 다시 고르게 하고, 한 자리만 남으면 그 자리 QR로 바뀝니다. 차량은 좌석 상태가 바뀔 때마다 서버에 알립니다 (`PUT /api/rides/:code/seats`).
-- **내릴 때 (이동 중):** 차가 서 있을 때(속도 기준, P단이 아니어도 됨) 자리가 비면 "내리는 중?"으로 표시하고, 좌석 점유 센서가 있는 자리는 **30초**, 벨트만 있는 자리는 **벨트를 푼 채 다시 출발하면** 하차로 확정합니다 (`AlightTracker`).
+- **내릴 때 (이동 중):** 차가 서 있을 때(속도 기준, P단이 아니어도 됨) **자리가 비고 그 자리 쪽 문이 이번 정차에서 열리면** "하차 확인 중"으로 표시합니다. 그 뒤 **30초 동안 계속 비어 있거나**, **비어 있는 채로 출발해 5초가 지나면** 하차로 확정합니다 (`AlightTracker`).
+  - 자리를 비운 것과 문이 열린 것의 순서는 따지지 않습니다. 문 열림은 Pleos Vehicle SDK `Door.registerDoorPosition`(권한 `CAR_DOORS`)으로 받습니다 (`DoorSensor`).
+  - 문은 이번 정차에서 닫힘 → 열림으로 바뀌었어야 합니다. 차가 완전히 서기 10초 전부터 연 것은 칩니다. 열린 채로 달려온 문(덜 닫힌 문)과 이전 정차 때 연 문은 치지 않습니다.
+  - 문이 열리지 않은 채 자리만 비면 하차로 보지 않고, 그대로 출발하면 판단을 버립니다 (자리 옮김, 센서 흔들림).
+  - 차가 그 자리 쪽 문의 신호를 주지 않으면 문 조건 없이 좌석만으로 판단합니다.
+  - 벨트만 있는 자리(좌석 점유 센서 없음)는 30초로는 확정하지 않고, 벨트를 푼 채 출발해 5초가 지나야 확정합니다. 벨트를 풀고 앉아 있는 사람과 내린 사람을 구분할 수 없기 때문입니다.
   하차 지점은 자리가 빈 순간이라 기다리는 시간은 금액에 영향이 없습니다. 달리는 중에 비면 하차로 보지 않습니다.
+  - **알려진 한계** (잘못 판단하면 승객이 아래 [아직 타고 있어요]로 취소합니다)
+    - 뒷좌석 가운데와 3열은 양쪽 2열 문 중 어느 쪽이 열려도 문 조건이 채워집니다. 옆 사람이 내리며 문을 열었고 본인이 벨트를 매지 않은 채(벨트만 있는 자리) 출발하면 하차로 판단할 수 있습니다.
+    - 정차 중 다른 자리로 옮겨 앉고 그쪽 문이 열렸으면, 원래 자리가 하차로 판단됩니다.
+    - 자기 자리 쪽이 아닌 반대쪽 문으로 내리면 하차를 놓칩니다. 이때는 도착할 때 함께 결제됩니다.
 - 하차가 확정되면 승객 휴대폰에 "하차 처리됐어요"와 **[아직 타고 있어요]**가 뜨고, **60초** 뒤 그 사람만 탄 구간만큼 결제합니다. 취소하면 그 자리는 다시 앉을 때까지 하차로 판단하지 않습니다.
 - 중간 하차 결제는 출퇴근 최종 판정 전이라 지금까지의 조건(출발 시각·출발지·내비 목적지)으로 미리 판정해 맞을 때만 하고, 아니면 도착 때 함께 결제합니다. 도착 때는 남은 사람을 결제하고, 먼저 결제한 사람은 서버가 다시 결제하지 않습니다.
 - 좌석 신호는 1.5초 동안 그대로일 때만 봅니다 (알림 등록 순간이나 앉는 동안 값이 잠깐 흔들림).
-- 에뮬레이터: Virtual Console의 Seat Occupancy로 시험합니다 (안전벨트 착용은 콘솔에서 바꿀 수 없음). debug 빌드는 콘솔과 반대로 들어오는 좌석 점유 값을 뒤집습니다 (`SEAT_OCCUPANCY_INVERTED`). 차속은 기어 D에서 가속 페달 값으로 바뀝니다.
+- 에뮬레이터: Virtual Console의 Seat Occupancy와 Door Position으로 시험합니다 (안전벨트 착용은 콘솔에서 바꿀 수 없음). 에뮬레이터는 조수석·뒷좌석 좌우 문의 위치를 줍니다. debug 빌드는 콘솔과 반대로 들어오는 좌석 점유 값을 뒤집습니다 (`SEAT_OCCUPANCY_INVERTED`). 차속은 기어 D에서 가속 페달 값으로 바뀝니다.
 
 **시연용 출퇴근 판정 (debug 빌드만)**: 자동결제는 평일 출퇴근 시간대에 집↔회사를 이동한 운행에서만 켜집니다. 다른 시간에 시연하려면 아래 명령으로 판정을 켭니다. 앱을 다시 시작하면 꺼집니다.
 
@@ -151,7 +162,8 @@ npm test    # 서버 테스트
 | 영역 | 카드 | 이 앱에서 쓰는 곳 |
 |---|---|---|
 | Motion | Gear Selection (P·R·N·D), Odometer (0 ~ 1,000,000 km) | 도착 확인(P단), 누적 거리 |
-| Convenience | Seat Occupancy (운전석·조수석·뒷좌석 좌우, Empty / Occupied) | 좌석 점유 (탑승 확인에 연결 예정) |
+| Convenience | Seat Occupancy (운전석·조수석·뒷좌석 좌우, Empty / Occupied) | 좌석 점유 (탑승 QR, 중간 하차 판단) |
+| Convenience | Door Position (앞·뒤 좌우, Close / Open) | 문 열림 (중간 하차 판단) |
 | Safety | Telltales (안전벨트 경고등 등 Off / On / Blink) | 안전벨트 **착용 여부가 아니라 경고등**만 바꿀 수 있습니다 |
 
 차속을 넣는 카드는 문서 표에 없습니다. 차속을 어떻게 바꾸는지는 Virtual Console을 열어 확인해야 합니다.
@@ -199,5 +211,5 @@ scripts/run-emulator.sh     에뮬레이터 + Virtual Console 한 번에 실행
 
 1. 핵심 방향 → 정해지면 `trip/`에 냥 요금 계산 또는 구간 비용 계산을, `ReceiptScreen`에 해당 내역을 추가합니다.
 2. 냥 요율 → 기본요금·저속 시간요금·심야 할증을 넣을지, 냥수증(영수증)에 냥 내역을 넣을지 정합니다.
-3. 탑승자 입력 → 지금은 이름만 받습니다. 좌석 점유를 연결하려면 `Seat` API와 `CAR_SEATS` 권한을 추가해야 합니다.
+3. 탑승자 입력 → 탑승 QR 과 좌석 점유·안전벨트·문 열림(`CAR_SEATS`, `CAR_DOORS`)을 연결했습니다. 이름 직접 입력도 남아 있습니다.
 4. 첫 검증 → Virtual Console로 속도·기어·누적 거리를 넣고 위 ⚠️ 항목을 확인합니다.

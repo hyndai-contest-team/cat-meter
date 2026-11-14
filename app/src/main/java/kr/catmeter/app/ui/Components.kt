@@ -64,7 +64,8 @@ fun OutlinePill(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
         onClick = onClick,
         enabled = enabled,
         shape = PillShape,
-        border = BorderStroke(1.dp, Palette.ground),
+        // 테두리가 바탕과 구분되도록 보조 글자색을 쓴다 (바탕 대비 3:1 이상)
+        border = BorderStroke(1.dp, if (enabled) Palette.sub else Palette.ground),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.text),
         modifier = modifier,
     ) {
@@ -76,9 +77,13 @@ fun OutlinePill(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
 @Composable
 fun Avatar(name: String, color: Color, size: Dp = 36.dp) {
     Box(Modifier.size(size).background(color, CircleShape), contentAlignment = Alignment.Center) {
-        Text(name.take(1), color = Palette.bg, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(firstLetter(name), color = Palette.bg, fontSize = 15.sp, fontWeight = FontWeight.Bold)
     }
 }
+
+/** 이름의 첫 글자. 이모지처럼 두 칸짜리 글자도 깨지지 않게 코드 포인트 단위로 자른다. */
+fun firstLetter(name: String): String =
+    if (name.isEmpty()) "" else name.substring(0, name.offsetByCodePoints(0, 1))
 
 /** 사람마다 다른 동그라미 색 (순서대로 돌려 쓴다) */
 fun avatarColor(index: Int): Color = when (index % 3) {

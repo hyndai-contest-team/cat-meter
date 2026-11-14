@@ -1,6 +1,7 @@
 package kr.catmeter.app
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +21,7 @@ import kotlinx.coroutines.launch
 import kr.catmeter.app.car.AaosMonitor
 import kr.catmeter.app.car.NaviSource
 import kr.catmeter.app.car.PleosVehicleSource
+import kr.catmeter.app.car.DoorSensor
 import kr.catmeter.app.car.SeatSensor
 import kr.catmeter.app.data.BoardingClient
 import kr.catmeter.app.data.CatMeterStore
@@ -32,6 +34,8 @@ import kr.catmeter.app.trip.CommuteWindow
 import kr.catmeter.app.trip.EnergyProfile
 import kr.catmeter.app.trip.GeoPoint
 import kr.catmeter.app.trip.AlightTracker
+import kr.catmeter.app.trip.DoorSignal
+import kr.catmeter.app.trip.doorSignal
 import kr.catmeter.app.trip.JoinPoint
 import kr.catmeter.app.trip.TripBill
 import kr.catmeter.app.trip.SeatPosition
@@ -135,6 +139,7 @@ class CatMeterSession(context: Context) {
     val pleos = PleosVehicleSource(context, scope)
     val navi = NaviSource(context, scope)
     val seatSensor = SeatSensor(context, scope, BuildConfig.SEAT_OCCUPANCY_INVERTED)
+    val doorSensor = DoorSensor(context, scope, SystemClock::elapsedRealtime)
 
     private val _state = MutableStateFlow(
         State(
@@ -175,6 +180,7 @@ class CatMeterSession(context: Context) {
         aaos.start()
         navi.start()
         seatSensor.start()
+        doorSensor.start()
         // 좌석에 새로 앉으면 그 자리 탑승 QR 을 띄울 목록에 넣는다 (도착 화면에서는 띄우지 않는다).
         // 알림을 등록하는 순간이나 앉는 동안 값이 잠깐 흔들리므로, 값이 [SEAT_SETTLE_MS] 동안 그대로일 때만 본다.
         scope.launch {
@@ -415,15 +421,23 @@ class CatMeterSession(context: Context) {
         val seated = st.riders
             .filter { it.seat != null && it.name in st.passengers && it.name !in st.alights }
             .associate { it.seat!! to it.name }
+        // 하차 판단의 대기 시간은 부팅 뒤 흐른 시간으로 잰다. 벽시계는 차량이 시간을 맞출 때 뛸 수 있다.
         alightTracker.update(
-            nowMs, st.seats, seated,
+            SystemClock.elapsedRealtime(), st.seats, seated,
             stopped = speedKph < TripTracker.STOPPED_KPH,
             moving = speedKph >= DEPART_KPH,
             point = point,
+            doors = doorsBySeat(seated.keys),
         ).forEach(::onAlight)
         st.alights
             .filter { (_, a) -> a.status == AlightStatus.GRACE && nowMs - a.graceSinceMs >= ALIGHT_GRACE_MS }
             .keys.forEach(::chargeAlighted)
+    }
+
+    /** 자리별 문 신호. 차가 그 자리 쪽 문의 신호를 주지 않으면 넣지 않는다 (좌석만으로 판단) */
+    private fun doorsBySeat(seats: Set<SeatPosition>): Map<SeatPosition, DoorSignal> {
+        val doors = doorSensor.signals.value
+        return seats.mapNotNull { seat -> seat.doorSignal(doors)?.let { seat to it } }.toMap()
     }
 
     private fun onAlight(a: AlightTracker.Alight) {
@@ -615,7 +629,7 @@ class CatMeterSession(context: Context) {
         private const val SEAT_SETTLE_MS = 1_500L
         /** 하차를 알린 뒤 승객이 '아직 타고 있어요'를 누를 수 있는 시간. 지나면 그 사람만 결제한다. */
         const val ALIGHT_GRACE_MS = 60_000L
-        /** 좌석 센서가 없는 자리에서 '다시 출발'로 보는 속도 */
+        /** 하차 판단에서 '다시 출발'로 보는 속도 */
         private const val DEPART_KPH = 5f
         /** 탑승 QR 화면이 떠 있는 동안 탑승자 목록을 확인하는 간격 */
         private const val BOARDING_POLL_MS = 2_000L

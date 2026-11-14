@@ -3,13 +3,14 @@ package kr.catmeter.app.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,6 +25,7 @@ import kr.catmeter.app.trip.TripRecord
  * - 그 밖의 이동: 결제 없이 냥만 표시하고 이유를 알려 준다.
  * 결제는 공모전용 테스트 결제다. 실제 출금은 없다.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettlePanel(session: CatMeterSession, record: TripRecord, autoPay: CatMeterSession.AutoPay) {
     Card(Modifier.fillMaxWidth()) {
@@ -35,9 +37,10 @@ fun SettlePanel(session: CatMeterSession, record: TripRecord, autoPay: CatMeterS
             return@Card
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // 제목과 칩이 한 줄에 안 들어가면 칩이 다음 줄로 내려간다
+        FlowRow(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("${commute.window?.label} 함께 타기 자동결제", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Chip("테스트 · 실제 출금 없음", Palette.warn)
+            Chip("테스트 · 실제 출금 없음", Palette.warn, background = Palette.surfaceHigh)
         }
         val perPerson = record.bill.perPassenger(record.passengers.size)
         when {
@@ -83,7 +86,7 @@ private fun ChargeRow(charge: BoardingClient.Charge, index: Int, record: TripRec
         (if (charge.name in record.joins) " · 중간 탑승" else "") +
         (if (leave != null) " · 먼저 내림" else "")
     Column(Modifier.fillMaxWidth().background(Palette.surfaceHigh, RowShape)) {
-        PersonRow(charge.name, index, detail = section, modifier = Modifier.fillMaxWidth()) {
+        PersonRow(charge.name, index, detail = section, modifier = Modifier.fillMaxWidth(), background = Color.Transparent) {
             if (charge.status != BoardingClient.Charge.Status.NOT_COMMUTING) {
                 BigValue(formatNyang(charge.amount), "원", 22.sp, unitColor = Palette.sub)
             }
