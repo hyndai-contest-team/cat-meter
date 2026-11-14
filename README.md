@@ -209,6 +209,15 @@ P단을 넣으면 "도착했나요?"를 묻고, 도착하면 남은 사람의 �
 
 ## 실행
 
+### 빌드된 APK 내려받기
+
+빌드된 APK는 저장소에 넣지 않고 [GitHub Releases](https://github.com/hyndai-contest-team/cat-meter/releases)에 올립니다.
+
+- [냥미터기 0.1.0-mvp (디버그 빌드)](https://github.com/hyndai-contest-team/cat-meter/releases/tag/v0.1.0-mvp): Pleos Connect 에뮬레이터 v2.1.0 용
+- 설치: `adb install -r cat-meter-0.1.0-mvp-debug.apk`
+- 디버그 빌드라 좌석 점유 값을 에뮬레이터 방향에 맞춰 뒤집어 읽고, 탑승 서버 주소는 `http://10.0.2.2:8787`입니다. 탑승 QR과 자동결제를 쓰려면 같은 컴퓨터에서 아래 탑승 등록 서버를 켜야 합니다.
+- 새로 만들려면 `./gradlew :app:assembleDebug`를 실행합니다. 결과는 `app/build/outputs/apk/debug/app-debug.apk`에 생깁니다.
+
 ### 개발 환경
 
 - Kotlin + Jetpack Compose, minSdk 28, Pleos Connect 에뮬레이터(system-image `android-34/pleos_car_emulator`)
