@@ -28,13 +28,16 @@
 
 커뮤니티와 기사에서 지인끼리 타는 차의 비용 문제를 다룬 글 20여 건의 원문을 읽었습니다 (2026-11-14). 설문이 아니라 사연이라 얼마나 흔한지를 보여 주는 숫자는 아닙니다. 인용과 주소는 기획서 2번과 [`2026_11_14_app_intro_pain_points_draft.md`](docs/application/2026_11_14_app_intro_pain_points_draft.md)에 있습니다.
 
-| 누구 | 겪는 문제 | 냥미터기가 하는 일 |
-|---|---|---|
-| 운전자 | 돈 얘기를 못 꺼내고 떠안는다 | 도착하면 실비가 자동으로 정산된다. 운전자는 아무 말도, 아무 조작도 하지 않는다 |
-| 운전자 | 받을 금액을 정해야 하는데 기준이 없다 | 기준을 하나로 정한다. 직접 든 비용만, 운전자도 같은 몫을 낸다. 금액은 차가 계산한다 |
-| 운전자 | 돈을 받아도 되는 운행인지 모른다 | 출퇴근 조건을 통과한 운행에서만 정산이 켜진다 |
-| 동승자 | 얼마를 줘야 맞는지 기준이 없다 | 차가 실제 연비와 달린 거리로 계산한 금액을 운전자와 똑같이 나눠 보여 준다 |
-| 동승자 | 실제 기름값을 몰라 부르는 대로 낸다 | 냥수증에 거리와 실비, 각자 낸 금액이 남는다 |
+**운전자가 겪는 문제**
+
+- **돈 얘기를 못 꺼내고 떠안는다** → 도착하면 실비가 자동으로 정산됩니다. 운전자는 아무 말도, 아무 조작도 하지 않습니다.
+- **받을 금액을 정해야 하는데 기준이 없다** → 기준을 하나로 정합니다. 직접 든 비용만, 운전자도 같은 몫을 냅니다. 금액은 차가 계산합니다.
+- **돈을 받아도 되는 운행인지 모른다** → 출퇴근 조건을 통과한 운행에서만 정산이 켜집니다.
+
+**동승자가 겪는 문제**
+
+- **얼마를 줘야 맞는지 기준이 없다** → 차가 실제 연비와 달린 거리로 계산한 금액을 운전자와 똑같이 나눠 보여 줍니다.
+- **실제 기름값을 몰라 부르는 대로 낸다** → 냥수증에 거리와 실비, 각자 낸 금액이 남습니다.
 
 **왜 차량 앱인가.** 위 문제는 모두 "실제로 누가 얼마나 탔고, 실제로 얼마가 들었는가"를 아무도 모르기 때문에 생깁니다. 휴대폰 송금 앱은 총액을 사람 수로 나눌 뿐이지만, 차는 이미 답을 알고 있습니다.
 
@@ -111,31 +114,46 @@ P단을 넣으면 "도착했나요?"를 묻고, 도착하면 남은 사람의 �
 | 민수 (먼저 내림) | 0 → 9 km | 185원 |
 | 하늘 | 0 → 13 km | 277원 |
 | 바다 (중간 탑승) | 5 → 13 km | 161원 |
-| 운전자 | 전 구간 | 279원 (충전비 902원에서 받은 623원을 뺀 나머지) |
+| 운전자 | 전 구간 | 279원 |
+
+운전자 몫 279원은 충전비 902원에서 세 사람에게 받은 623원을 뺀 나머지입니다.
 
 ## 주요 기능
 
 상태 표시는 기획서와 같습니다. **구현**은 코드에 있고 단위 테스트를 통과한 것, **계획**은 아직 만들지 않은 것입니다.
 
-| 기능 | 내용 | 쓰는 차량 데이터 | 상태 |
-|---|---|---|---|
-| 오늘의 고양이 | 출발 전 이름·털 색(4종)·소품(4종)을 고르는 3D 고양이. 이동 횟수가 쌓인다 | 정차 중에만 표시 | 구현 |
-| 앉으면 뜨는 자리별 QR | 동승석에 새로 앉으면 정차 중에 그 자리 탑승 QR이 자동으로 뜨고, 등록이 끝나면 닫힌다 | 좌석 점유·안전벨트, 주행 제한 상태 | 구현 (탑승 등록은 웹 화면. 승객용 앱은 계획) |
-| 함께 탈 때 자리 고르기 | 두 명 이상이 함께 앉으면 QR 하나만 띄우고, 휴대폰의 좌석 배치도에서 앉은 자리를 고른다 | 좌석 센서로 본 앉은 자리 | 구현 |
-| 중간 탑승 | 이동 중 정차해서 누가 앉으면 그 자리 QR이 뜨고 탄 지점을 기록한다 | 좌석 센서, 주행 제한 상태, 계기판 거리 | 구현 |
-| 하차 판단 | 정차 중 자리가 비고 그 자리 쪽 문이 열리면 하차로 본다 (30초 유지 또는 출발 후 5초) | 좌석 점유·안전벨트, 문 열림, 차속 | 구현 (에뮬레이터에서 확인) |
-| 실비 계산 | 달린 거리 ÷ 연비·전비 × 단가. 나눌 금액은 이 실비뿐이다 | 계기판 누적 거리, 연비·전비 | 구현 (주유비·충전비 + 내비 경로 통행료) |
-| 냥 미터 | 100m마다 10냥, 1분마다 10냥. 함께 달린 기록이며 돈이 아니다 | 계기판 누적 거리 | 구현 |
-| 운전자 포함 구간별 나누기 | 탑승·하차 시점마다 구간을 나누고, 각 구간의 실비를 그때 타고 있던 사람과 운전자가 똑같이 나눈다 | 탑승·하차 지점의 실제 거리 | 구현 |
-| 내리면 그 사람만 정산 | 하차가 확정되면 1분 뒤 그 사람이 탄 구간의 몫만 정산한다. 승객이 [아직 타고 있어요]로 취소할 수 있다 | 하차 지점의 실제 거리 | 구현 (테스트 결제) |
-| 도착하면 자동 정산 | 결제 수단을 한 번 등록하면 도착 후 남은 사람의 몫이 자동으로 정산된다 | P단, 내비 안내 종료 | 구현 (테스트 결제) |
-| 출퇴근 판정 (운전자) | 평일 출퇴근 시간대 + 내비의 집↔회사 이동 + 시간대당 1회일 때만 정산한다 | 내비 즐겨찾기, 출발·도착 위치 | 구현. 돌아간 거리 상한은 계획 |
-| 출퇴근 판정 (동승자) | 탈 때 "출퇴근 길"인지 직접 고른다. 아니라고 고른 사람은 나누는 인원에서 뺀다 | 탑승·하차 위치 | 탈 때 고르기는 구현. 직장 메일 인증과 내린 뒤 경로 확인은 계획 |
-| 냥수증 | 고양이, 목적지, 시간, 거리, 냥, 실비, 함께 탄 사람을 담은 영수증. 이미지 저장·공유 | – | 구현 |
-| 내비 연동 | 목적지를 찍으면 예상 실비와 정산 가능 여부를 미리 보여 준다 | NaviHelper 목적지·경로 | 구현 |
-| 통행료 나누기 | 요금소를 지날 때 타고 있던 사람과 운전자가 똑같이 나눈다. 출발 전 예상 실비에는 경로 전체 통행료를 넣는다 | 내비 경로 통행료(`RouteStartInfo.tollFare`), 회전 안내의 요금소(`TURN_TOLL`), 계기판 거리 | 구현 (에뮬레이터에서 확인). 요금소별 금액은 내비가 주지 않아 남은 통행료를 남은 요금소 수로 똑같이 나눈다. 운전자가 실제 금액으로 고치는 기능은 계획 |
-| 하차·정산 안내 음성 | 하차가 확정됐을 때와 도착해 정산됐을 때 한 문장으로 읽어 준다 | Pleos TextToSpeech (온디바이스) | 구현 (에뮬레이터에서 재생 시작·완료 확인) |
-| 승객용 휴대폰 앱 | 직장 메일 인증, 집·직장 등록, 앱 안 QR 스캔, 결제 수단 저장, 푸시 알림 | – | 계획. 지금은 QR로 열리는 웹 화면 |
+### 탑승과 하차 (구현)
+
+- **앉으면 뜨는 자리별 QR** — 동승석에 새로 앉으면 정차 중에 그 자리 탑승 QR이 자동으로 뜨고, 등록이 끝나면 닫힙니다. 좌석 점유·안전벨트와 주행 제한 상태를 씁니다. 탑승 등록은 지금 웹 화면이고, 승객용 앱은 계획입니다.
+- **함께 탈 때 자리 고르기** — 두 명 이상이 함께 앉으면 QR 하나만 띄우고, 휴대폰의 좌석 배치도에서 앉은 자리를 고릅니다. 좌석 센서로 본 앉은 자리를 씁니다.
+- **중간 탑승** — 이동 중 정차해서 누가 앉으면 그 자리 QR이 뜨고 탄 지점을 기록합니다. 좌석 센서, 주행 제한 상태, 계기판 거리를 씁니다.
+- **하차 판단** — 정차 중 자리가 비고 그 자리 쪽 문이 열리면 하차로 봅니다 (30초 유지 또는 출발 후 5초). 좌석 점유·안전벨트, 문 열림, 차속을 씁니다. 에뮬레이터에서 확인했습니다.
+
+### 금액 계산과 정산 (구현)
+
+- **실비 계산** — 달린 거리 ÷ 연비·전비 × 단가로 주유비·충전비를 계산하고 내비 경로 통행료를 더합니다. 나눌 금액은 이 실비뿐입니다. 계기판 누적 거리와 연비·전비를 씁니다.
+- **운전자 포함 구간별 나누기** — 탑승·하차 시점마다 구간을 나누고, 각 구간의 실비를 그때 타고 있던 사람과 운전자가 똑같이 나눕니다. 탑승·하차 지점의 실제 거리를 씁니다.
+- **통행료 나누기** — 요금소를 지날 때 타고 있던 사람과 운전자가 똑같이 나눕니다. 출발 전 예상 실비에는 경로 전체 통행료를 넣습니다. 내비 경로 통행료(`RouteStartInfo.tollFare`), 회전 안내의 요금소(`TURN_TOLL`), 계기판 거리를 씁니다. 요금소별 금액은 내비가 주지 않아 남은 통행료를 남은 요금소 수로 똑같이 나눕니다. 에뮬레이터에서 확인했습니다.
+- **내리면 그 사람만 정산** — 하차가 확정되면 1분 뒤 그 사람이 탄 구간의 몫만 정산합니다. 승객이 [아직 타고 있어요]로 취소할 수 있습니다. 테스트 결제입니다.
+- **도착하면 자동 정산** — 결제 수단을 한 번 등록하면 도착 후 남은 사람의 몫이 자동으로 정산됩니다. P단과 내비 안내 종료로 도착을 판단합니다. 테스트 결제입니다.
+- **냥 미터** — 100m마다 10냥, 1분마다 10냥. 함께 달린 기록이며 돈이 아닙니다. 계기판 누적 거리를 씁니다.
+
+### 출퇴근 판정
+
+- **운전자 (구현)** — 평일 출퇴근 시간대, 내비의 집↔회사 이동, 시간대당 1회일 때만 정산합니다. 내비 즐겨찾기와 출발·도착 위치를 씁니다. 돌아간 거리 상한은 계획입니다.
+- **동승자 (일부 구현)** — 탈 때 "출퇴근 길"인지 직접 고르고, 아니라고 고른 사람은 나누는 인원에서 뺍니다. 여기까지 구현했습니다. 직장 메일 인증과 내린 뒤 경로 확인은 계획입니다.
+
+### 그 밖의 기능 (구현)
+
+- **오늘의 고양이** — 출발 전 이름·털 색(4종)·소품(4종)을 고르는 3D 고양이. 이동 횟수가 쌓입니다. 정차 중에만 보입니다.
+- **내비 연동** — 목적지를 찍으면 예상 실비와 정산 가능 여부를 미리 보여 줍니다. NaviHelper의 목적지·경로를 씁니다.
+- **하차·정산 안내 음성** — 하차가 확정됐을 때와 도착해 정산됐을 때 한 문장으로 읽어 줍니다. Pleos TextToSpeech(온디바이스)를 씁니다. 에뮬레이터에서 재생 시작·완료를 확인했습니다.
+- **냥수증** — 고양이, 목적지, 시간, 거리, 냥, 실비, 함께 탄 사람을 담은 영수증. 이미지로 저장·공유합니다.
+
+### 아직 만들지 않은 것 (계획)
+
+- **승객용 휴대폰 앱** — 직장 메일 인증, 집·직장 등록, 앱 안 QR 스캔, 결제 수단 저장, 푸시 알림. 지금은 QR로 열리는 웹 화면입니다.
+- **통행료를 운전자가 실제 금액으로 고치기**
 
 ## 금액을 나누는 방법
 
@@ -187,18 +205,27 @@ P단을 넣으면 "도착했나요?"를 묻고, 도착하면 남은 사람의 �
 
 ## 사용한 차량 데이터
 
-| 데이터 | 경로 | 권한 |
-|---|---|---|
-| 차속 | AAOS `CarPropertyManager` `PERF_VEHICLE_SPEED` (Vehicle SDK 2.3.2에는 차속 API 없음) | `android.car.permission.CAR_SPEED` (런타임 요청) |
-| 주행 제한 상태 | AAOS `CarUxRestrictionsManager` | 없음 |
-| 누적 주행 거리 | Pleos Vehicle `Odometer.getCurrentDistanceDriven` / `registerDistanceDriven` | `pleos.car.permission.CAR_DRIVE` |
-| 기어(P 판단) | Pleos Vehicle `Gear.getCurrentGearSelectionState` / `registerGearSelection` | `pleos.car.permission.CAR_DRIVE` |
-| 전비·연비 | Pleos Vehicle `EvBattery.getCumulativeEvEfficiency` / `Fuel.getCumulativeFuelEconomy` | `pleos.car.permission.CAR_ENERGY` |
-| 목적지·집·회사·현재 위치 | Pleos NaviHelper `getDestinationInfo` / `onRouteStarted` / `getBookmarkInfo`(HOME·OFFICE) / `getCurrentLocationInfo` | `pleos.car.permission.NAVI_ROUTE` |
-| 좌석 점유·안전벨트 착용 | Pleos Vehicle `Seat.registerSeatOccupancy` / `registerSeatBeltBuckledState` | `pleos.car.permission.CAR_SEATS` |
-| 문 열림 | Pleos Vehicle `Door.checkDoorPositionCapabilities` / `registerDoorPosition` | `pleos.car.permission.CAR_DOORS` |
-| 경로 통행료·요금소 | Pleos NaviHelper `onRouteStarted`(`RouteStartInfo.tollFare`) / `getTBTInfo`(`TURN_TOLL`) | `pleos.car.permission.NAVI_ROUTE` |
-| 안내 음성 | Pleos TextToSpeech `Mode.ON_DEVICE`, `speak` (앱 등록 없이 사용) | `pleos.car.permission.TTS_SERVICE` |
+**AAOS 표준 API**
+
+- **차속** — `CarPropertyManager`의 `PERF_VEHICLE_SPEED` (Vehicle SDK 2.3.2에는 차속 API가 없습니다). 권한 `android.car.permission.CAR_SPEED`(런타임 요청).
+- **주행 제한 상태** — `CarUxRestrictionsManager`. 권한 없음.
+
+**Pleos Vehicle SDK**
+
+- **누적 주행 거리** — `Odometer.getCurrentDistanceDriven`, `registerDistanceDriven`. 권한 `pleos.car.permission.CAR_DRIVE`.
+- **기어(P 판단)** — `Gear.getCurrentGearSelectionState`, `registerGearSelection`. 권한 `pleos.car.permission.CAR_DRIVE`.
+- **전비·연비** — `EvBattery.getCumulativeEvEfficiency`, `Fuel.getCumulativeFuelEconomy`. 권한 `pleos.car.permission.CAR_ENERGY`.
+- **좌석 점유·안전벨트 착용** — `Seat.registerSeatOccupancy`, `registerSeatBeltBuckledState`. 권한 `pleos.car.permission.CAR_SEATS`.
+- **문 열림** — `Door.checkDoorPositionCapabilities`, `registerDoorPosition`. 권한 `pleos.car.permission.CAR_DOORS`.
+
+**Pleos NaviHelper** (권한 `pleos.car.permission.NAVI_ROUTE`)
+
+- **목적지·집·회사·현재 위치** — `getDestinationInfo`, `onRouteStarted`, `getBookmarkInfo`(HOME·OFFICE), `getCurrentLocationInfo`.
+- **경로 통행료·요금소** — `onRouteStarted`(`RouteStartInfo.tollFare`), `getTBTInfo`(`TURN_TOLL`).
+
+**Pleos TextToSpeech**
+
+- **안내 음성** — `Mode.ON_DEVICE`, `speak` (온디바이스 모드라 앱 등록 없이 씁니다). 권한 `pleos.car.permission.TTS_SERVICE`.
 
 **에뮬레이터에서 확인한 것 (Pleos Connect 에뮬레이터 v2.1.0)**
 
@@ -275,29 +302,30 @@ npm test    # 서버 테스트
 - debug 빌드만 `10.0.2.2`·`localhost`로 http 통신을 허용합니다. 실차·release는 https 서버가 필요합니다.
 - 서버에 연결하지 못하면 QR 대신 "탑승 서버에 연결할 수 없어요"와 **다시 연결** 버튼을 보여 주고, 이름은 직접 넣을 수 있습니다.
 
-| 주소 | 누가 | 하는 일 |
-|---|---|---|
-| `PUT /api/rides/:code` | 차량 앱 | 이동을 열고 휴대폰용 주소(`joinUrl`)와 차량 토큰을 받음 |
-| `GET /api/rides/:code` | 차량 앱 | 탑승자 목록과 좌석 상태 |
-| `PUT /api/rides/:code/seats` | 차량 앱 | 좌석 상태가 바뀔 때마다 알림 |
-| `POST /api/rides/:code/alights` | 차량 앱 | 하차 확정 알림 |
-| `POST /api/rides/:code/charges` | 차량 앱 | 자동결제 (테스트). `Authorization: Bearer <차량 토큰>` 필요 |
-| `GET /ride/:code` | 승객 휴대폰 | 탑승 등록 페이지 |
-| `POST /api/rides/:code/passengers` | 승객 휴대폰 | 이름·출퇴근 여부를 넣어 탑승 (최대 7명, 이름 1~10자, 같은 이름 불가) |
-| `POST /api/rides/:code/passengers/:id/payment` | 승객 휴대폰 | 테스트 결제 수단 등록 (출퇴근 길인 사람만) |
-| `POST /api/rides/:code/passengers/:id/seat` | 승객 휴대폰 | 자리 고르기·자리 이동 |
-| `POST /api/rides/:code/passengers/:id/stay` | 승객 휴대폰 | [아직 타고 있어요] 하차 취소 |
-| `GET /api/rides/:code/passengers/:id` | 승객 휴대폰 | 내 탑승 정보와 결제 결과 |
+**차량 앱이 쓰는 주소**
+
+- `PUT /api/rides/:code` — 이동을 열고 휴대폰용 주소(`joinUrl`)와 차량 토큰을 받습니다.
+- `GET /api/rides/:code` — 탑승자 목록과 좌석 상태를 받습니다.
+- `PUT /api/rides/:code/seats` — 좌석 상태가 바뀔 때마다 알립니다.
+- `POST /api/rides/:code/alights` — 하차 확정을 알립니다.
+- `POST /api/rides/:code/charges` — 자동결제(테스트)를 요청합니다. `Authorization: Bearer <차량 토큰>`이 필요합니다.
+
+**승객 휴대폰이 쓰는 주소**
+
+- `GET /ride/:code` — 탑승 등록 페이지를 엽니다.
+- `POST /api/rides/:code/passengers` — 이름과 출퇴근 여부를 넣어 탑승합니다 (최대 7명, 이름 1~10자, 같은 이름 불가).
+- `POST /api/rides/:code/passengers/:id/payment` — 테스트 결제 수단을 등록합니다 (출퇴근 길인 사람만).
+- `POST /api/rides/:code/passengers/:id/seat` — 자리를 고르거나 옮깁니다.
+- `POST /api/rides/:code/passengers/:id/stay` — [아직 타고 있어요]로 하차를 취소합니다.
+- `GET /api/rides/:code/passengers/:id` — 내 탑승 정보와 결제 결과를 받습니다.
 
 ### 에뮬레이터에서 시연하기
 
 주행 값은 **Pleos Connect Virtual Console**에서 넣습니다. 이 에뮬레이터는 user 빌드라 `adb shell cmd car_service inject-vhal-event`를 쓸 수 없습니다.
 
-| 영역 | 카드 | 이 앱에서 쓰는 곳 |
-|---|---|---|
-| Motion | Gear Selection (P·R·N·D), Odometer | 도착 확인(P단), 주행 제한 해제, 누적 거리 |
-| Convenience | Seat Occupancy (조수석·뒷좌석 좌우) | 탑승 QR, 중간 하차 판단 |
-| Convenience | Door Position (앞·뒤 좌우) | 중간 하차 판단 |
+- **기어(P·R·N·D), 누적 거리** — Motion 영역의 Gear Selection, Odometer 카드. 도착 확인(P단), 주행 제한 해제, 달린 거리에 씁니다.
+- **좌석 점유** — Convenience 영역의 Seat Occupancy 카드(조수석, 뒷좌석 좌우). 탑승 QR과 중간 하차 판단에 씁니다.
+- **문 열림** — Convenience 영역의 Door Position 카드(앞·뒤 좌우). 중간 하차 판단에 씁니다.
 
 - 탑승 QR과 입력 화면은 주행 제한이 풀렸을 때만 뜹니다. 에뮬레이터에서는 기어를 P에 두어야 풀립니다.
 - 차속은 기어 D에서 가속 페달 값으로 바뀝니다.
