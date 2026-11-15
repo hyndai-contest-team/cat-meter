@@ -48,8 +48,12 @@ fun SettlePanel(session: CatMeterSession, record: TripRecord, autoPay: CatMeterS
         val split = record.split
         val sharing = record.passengers.size - record.notSharing.size
         Text(
-            "${bill.energy.kind.label} ${formatNyang(bill.costWon)}원을 " + when {
-                record.joins.isNotEmpty() || record.leaves.isNotEmpty() -> "각자 탄 구간만큼, 운전자도 포함해 나눠요. 먼저 내린 사람은 내릴 때 결제했어요"
+            "${bill.energy.kind.label} ${formatNyang(bill.energyWon)}원" +
+                (if (bill.tollWon > 0) "과 통행료 ${formatNyang(bill.tollWon)}원" else "") + "을 " + when {
+                record.joins.isNotEmpty() || record.leaves.isNotEmpty() ->
+                    "각자 탄 구간만큼, 운전자도 포함해 나눠요." +
+                        (if (bill.tollWon > 0) " 통행료는 요금소를 지날 때 타고 있던 사람끼리 나눠요." else "") +
+                        " 먼저 내린 사람은 내릴 때 결제했어요"
                 sharing > 0 -> "운전자까지 ${sharing + 1}명이 똑같이 나눠요"
                 else -> "나눌 사람이 없어 운전자가 내요"
             },

@@ -128,6 +128,44 @@ class TripBillTest {
     }
 
     @Test
+    fun `toll is split between the driver and whoever was on board at the gate`() {
+        // 주유비 3,400 + 통행료 1,900. A·B·C 와 운전자가 처음부터 끝까지 탔다
+        val tolls = listOf(TollEvent(JoinPoint(10f, 12 * 60_000L), 1_900))
+        val s = TripBill.split(24f, 30 * 60_000L, fuel, listOf("A", "B", "C"), emptyMap(), tolls = tolls)
+        assertEquals(mapOf("A" to 1_325, "B" to 1_325, "C" to 1_325), s.passengers)   // 850 + 475
+        assertEquals(1_325, s.driverWon)
+        assertEquals(5_300, TripBill.of(24f, 30 * 60_000L, fuel, tollWon = 1_900).costWon)
+    }
+
+    @Test
+    fun `someone who got off before the gate or boarded after it does not pay the toll`() {
+        val gate = TollEvent(JoinPoint(18f, 22 * 60_000L), 1_800)
+        // A 는 12km 에 내렸고(요금소 전), C 는 20km 에 탔다(요금소 뒤). B 만 요금소를 함께 지났다
+        val s = TripBill.split(
+            24f, 30 * 60_000L, fuel, listOf("A", "B", "C"),
+            joins = mapOf("C" to JoinPoint(20f, 25 * 60_000L)), leaves = mapOf("A" to half), tolls = listOf(gate),
+        )
+        val noToll = TripBill.split(
+            24f, 30 * 60_000L, fuel, listOf("A", "B", "C"),
+            joins = mapOf("C" to JoinPoint(20f, 25 * 60_000L)), leaves = mapOf("A" to half),
+        )
+        assertEquals(noToll.passengers["A"], s.passengers["A"])
+        assertEquals(noToll.passengers["C"], s.passengers["C"])
+        assertEquals(noToll.passengers.getValue("B") + 900, s.passengers["B"])   // 1,800 을 B 와 운전자가 반씩
+        assertEquals(noToll.driverWon + 900, s.driverWon)
+    }
+
+    @Test
+    fun `a toll after the early leaver got off does not change what they already paid`() {
+        val atLeave = TripBill.shares(12f, 15 * 60_000L, fuel, listOf("A", "B"), emptyMap(), mapOf("A" to half))
+        val later = TripBill.shares(
+            24f, 30 * 60_000L, fuel, listOf("A", "B"), emptyMap(), mapOf("A" to half),
+            tolls = listOf(TollEvent(JoinPoint(18f, 22 * 60_000L), 1_900)),
+        )
+        assertEquals(atLeave["A"], later["A"])
+    }
+
+    @Test
     fun `vehicle efficiency outside plausible range falls back`() {
         assertNull(EnergyProfile.fromVehicle(EnergyKind.EV, 160f))   // Wh/km 같은 다른 단위
         assertNull(EnergyProfile.fromVehicle(EnergyKind.FUEL, 0f))

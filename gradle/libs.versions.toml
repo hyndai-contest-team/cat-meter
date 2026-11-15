@@ -9,6 +9,7 @@ junit = "4.13.2"
 # Pleos Connect SDK — document.pleos.ai 기준 버전
 pleosVehicle = "2.3.2"
 pleosNaviHelper = "3.0.5"
+pleosTextToSpeech = "3.3.1"
 zxing = "3.5.3"
 
 [libraries]
@@ -26,6 +27,7 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 pleos-vehicle = { group = "ai.pleos.playground", name = "Vehicle", version.ref = "pleosVehicle" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 pleos-navihelper = { group = "ai.pleos.playground", name = "NaviHelper", version.ref = "pleosNaviHelper" }
+pleos-texttospeech = { group = "ai.pleos.playground", name = "TextToSpeech", version.ref = "pleosTextToSpeech" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

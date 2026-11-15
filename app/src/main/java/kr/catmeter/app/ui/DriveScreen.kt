@@ -54,7 +54,7 @@ fun DriveScreen(session: CatMeterSession, state: CatMeterSession.State, car: Car
     }
     val openBoardingQr = { showBoardingQr = true }
     val showCat = !live.isMoving
-    val bill = TripBill.of(live.distanceKm, live.elapsedMs, state.energy)
+    val bill = TripBill.of(live.distanceKm, live.elapsedMs, state.energy, state.tolls.sumOf { it.won })
     val canFinish = !car.restricted && !live.isMoving
 
     if (wide) {
@@ -115,7 +115,7 @@ private fun MeterCard(
         // 냥은 기록일 뿐이고, 결제는 실비(주유비·충전비)만 운전자까지 포함해 나눈다
         val sharing = state.passengers.count { it !in state.alights && it !in state.notSharing }
         Text(
-            "나눌 실비 ${formatNyang(bill.costWon)}원" +
+            "나눌 실비 ${formatNyang(bill.costWon)}원" + (if (bill.tollWon > 0) " (통행료 ${formatNyang(bill.tollWon)}원 포함)" else "") +
                 (bill.perPerson(sharing)?.let { " · 지금 인원이면 운전자 포함 1인당 약 ${formatNyang(it)}원" } ?: ""),
             fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 2,
         )

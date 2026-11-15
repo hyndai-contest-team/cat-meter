@@ -52,6 +52,7 @@ kotlin {
 dependencies {
     implementation(libs.pleos.vehicle)
     implementation(libs.pleos.navihelper)
+    implementation(libs.pleos.texttospeech)
     implementation(libs.zxing.core)
 
     implementation(platform(libs.androidx.compose.bom))

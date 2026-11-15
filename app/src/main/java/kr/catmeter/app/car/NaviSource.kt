@@ -2,6 +2,8 @@ package kr.catmeter.app.car
 
 import ai.pleos.playground.navi.constants.BookmarkType
 import ai.pleos.playground.navi.constants.NaviErrorCode
+import ai.pleos.playground.navi.constants.TurnType
+import ai.pleos.playground.navi.data.TBTInfo
 import ai.pleos.playground.navi.data.BookmarkInfo
 import ai.pleos.playground.navi.data.CurrentLocationInfo
 import ai.pleos.playground.navi.data.DestinationArrivedInfo
@@ -50,6 +52,7 @@ class NaviSource(context: Context, private val scope: CoroutineScope) {
         val remainDistanceM: Int,
         /** 초 */
         val remainTimeS: Int,
+        /** 이 경로 전체의 통행료(원). 내비가 경로를 시작할 때 알려 준 값이다. 없으면 0 */
         val tollFare: Int,
     ) {
         val remainKm: Float get() = remainDistanceM / 1000f
@@ -76,6 +79,14 @@ class NaviSource(context: Context, private val scope: CoroutineScope) {
     private val _routeEnded = MutableSharedFlow<RouteEnd>(extraBufferCapacity = 4)
     val routeEnded: SharedFlow<RouteEnd> = _routeEnded
 
+    /** 앞으로 남은 요금소까지의 거리(km), 가까운 순서. 내비의 회전 안내 목록(TURN_TOLL)에서 읽는다. 안내가 없으면 비어 있다. */
+    private val _tollGatesKm = MutableStateFlow<List<Float>>(emptyList())
+    val tollGatesKm: StateFlow<List<Float>> = _tollGatesKm.asStateFlow()
+
+    /** 새 경로를 시작할 때마다 그 경로 전체의 통행료(원)를 알린다 */
+    private val _routeStarted = MutableSharedFlow<Int>(extraBufferCapacity = 4)
+    val routeStarted: SharedFlow<Int> = _routeStarted
+
     private val _location = MutableStateFlow<GeoPoint?>(null)
     val location: StateFlow<GeoPoint?> = _location.asStateFlow()
 
@@ -91,7 +102,9 @@ class NaviSource(context: Context, private val scope: CoroutineScope) {
                 remainTimeS = routeStartInfo.duration,
                 tollFare = routeStartInfo.tollFare,
             )
+            _routeStarted.tryEmit(routeStartInfo.tollFare)
             navi.getDestinationInfo()
+            navi.getTBTInfo()
         }
 
         override fun onDestinationChanged() {
@@ -110,8 +123,24 @@ class NaviSource(context: Context, private val scope: CoroutineScope) {
                 point = pointOrNull(destinationInfo.latitude, destinationInfo.longitude),
                 remainDistanceM = destinationInfo.remainDistance,
                 remainTimeS = destinationInfo.remainTime,
-                tollFare = destinationInfo.tollFare,
+                // 에뮬레이터 내비는 여기서 통행료를 0 으로 준다 (경로 시작 이벤트에만 값이 있다).
+                // 0 이면 같은 경로를 시작할 때 받은 값을 그대로 둔다.
+                tollFare = destinationInfo.tollFare.takeIf { it > 0 } ?: _destination.value?.tollFare ?: 0,
             )
+        }
+
+        override fun onTBTInfo(tbtInfoList: List<TBTInfo>) {
+            // 목록은 앞으로 남은 안내가 순서대로 들어 있고, 거리는 바로 앞 안내에서 그 안내까지의 구간 길이다
+            // (에뮬레이터에서 확인). 그래서 요금소까지의 거리는 그 앞 구간을 모두 더한 값이다.
+            var sumM = 0.0
+            val gates = buildList {
+                tbtInfoList.forEach { tbt ->
+                    sumM += tbt.distance
+                    if (tbt.type == TurnType.TURN_TOLL) add((sumM / 1000.0).toFloat())
+                }
+            }
+            if (gates != _tollGatesKm.value) Log.i(TAG, "toll gates ahead (km): $gates")
+            _tollGatesKm.value = gates
         }
 
         override fun onRouteCancelled() {
@@ -180,7 +209,12 @@ class NaviSource(context: Context, private val scope: CoroutineScope) {
             while (isActive) {
                 runCatching {
                     navi.getCurrentLocationInfo()
-                    if (_destination.value != null) navi.getDestinationInfo()
+                    if (_destination.value != null) {
+                        navi.getDestinationInfo()
+                        navi.getTBTInfo()
+                    } else {
+                        _tollGatesKm.value = emptyList()
+                    }
                 }
                 delay(POLL_MS)
             }
@@ -230,6 +264,6 @@ class NaviSource(context: Context, private val scope: CoroutineScope) {
 
     companion object {
         private const val TAG = "CatMeterNavi"
-        private const val POLL_MS = 10_000L
+        private const val POLL_MS = 3_000L
     }
 }

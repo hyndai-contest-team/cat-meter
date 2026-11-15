@@ -50,8 +50,9 @@ data class CostSplit(
 
 /**
  * 이동 한 번의 금액.
- * - 실비([costWon]): 주유비·충전비. 결제는 이것만 나눈다. 운전자를 포함한 1/n 이다.
- *   통행료·주차비도 실비지만 차량이 금액을 주지 않아 아직 넣지 못한다 (Vehicle SDK Toll 은 안내 음량만 있다).
+ * - 실비([costWon]): 주유비·충전비와 통행료. 결제는 이것만 나눈다. 운전자를 포함한 1/n 이다.
+ *   통행료는 내비가 알려 준 경로 통행료를 요금소를 지날 때마다 기록한 것이다 ([TollTracker]).
+ *   주차비도 실비지만 차가 금액을 알 수 없어 넣지 못한다.
  * - 냥([meter]): 거리·시간 미터. 고양 영수증에 남기는 기록이고 결제에는 쓰지 않는다.
  * 정산은 출퇴근 함께 타기로 판정된 이동에서만 한다(CommuteRule).
  */
@@ -59,12 +60,14 @@ data class TripBill(
     val meter: NyangFare,
     val energyWon: Int,
     val energy: EnergyProfile,
+    /** 통행료(원). 지난 요금소 몫, 또는 출발 전 예상에서는 경로 전체 */
+    val tollWon: Int = 0,
 ) {
     /** 기록용 냥 (거리 + 시간). 결제 금액이 아니다 */
     val meterNyang: Int get() = meter.totalNyang
 
     /** 나눠 낼 실비 합계(원) */
-    val costWon: Int get() = energyWon
+    val costWon: Int get() = energyWon + tollWon
 
     /**
      * 처음부터 끝까지 함께 탔을 때 동승자 한 사람이 낼 금액. 운전자도 한 사람으로 센다.
@@ -85,6 +88,8 @@ data class TripBill(
          * 먼저 내린 사람의 금액은 그 뒤에 누가 타고 내리든 바뀌지 않는다 (지난 구간만 쓰므로). 그래서 내리자마자 결제할 수 있다.
          * @param joins 중간에 탄 사람의 탑승 지점. 없는 사람은 출발부터 탔다.
          * @param leaves 먼저 내린 사람의 하차 지점. 없는 사람은 도착까지 탔다.
+         * @param tolls 지난 요금소와 통행료. 요금소를 지날 때 타고 있던 사람과 운전자가 똑같이 나눈다.
+         *   그 전에 내린 사람과 그 뒤에 탄 사람은 내지 않는다.
          * @param notSharing 나누는 인원에 넣지 않는 사람 (출퇴근 길이 아니라고 고른 사람). 금액은 0 이고,
          *   그 사람 몫은 나머지 사람과 운전자가 나눈다.
          */
@@ -96,13 +101,15 @@ data class TripBill(
             joins: Map<String, JoinPoint>,
             leaves: Map<String, JoinPoint> = emptyMap(),
             notSharing: Set<String> = emptySet(),
+            tolls: List<TollEvent> = emptyList(),
         ): CostSplit {
             val end = JoinPoint(distanceKm.coerceAtLeast(0f), elapsedMs.coerceAtLeast(0L))
-            val total = of(end.distanceKm, end.elapsedMs, energy).costWon
+            val paidTolls = tolls.filter { it.point <= end && it.won > 0 }
+            val total = of(end.distanceKm, end.elapsedMs, energy).energyWon + paidTolls.sumOf { it.won }
             val sharing = passengers.filter { it !in notSharing }
             fun startOf(name: String): JoinPoint = joins[name]?.let { minOf(it, end) } ?: JoinPoint.START
             fun endOf(name: String): JoinPoint = leaves[name]?.let { maxOf(minOf(it, end), startOf(name)) } ?: end
-            fun costAt(p: JoinPoint): Int = of(p.distanceKm, p.elapsedMs, energy).costWon
+            fun costAt(p: JoinPoint): Int = of(p.distanceKm, p.elapsedMs, energy).energyWon
 
             val points = (sharing.map(::startOf) + sharing.map(::endOf) + JoinPoint.START + end).distinct().sorted()
             val owed = passengers.associateWith { 0.0 }.toMutableMap()
@@ -110,6 +117,11 @@ data class TripBill(
                 val riders = sharing.filter { startOf(it) <= from && endOf(it) >= to }
                 if (riders.isEmpty()) return@zipWithNext
                 val each = (costAt(to) - costAt(from)).coerceAtLeast(0).toDouble() / (riders.size + 1)   // +1 = 운전자
+                riders.forEach { owed[it] = owed.getValue(it) + each }
+            }
+            paidTolls.forEach { toll ->
+                val riders = sharing.filter { startOf(it) <= toll.point && endOf(it) >= toll.point }
+                val each = toll.won.toDouble() / (riders.size + 1)
                 riders.forEach { owed[it] = owed.getValue(it) + each }
             }
             // 부동소수 오차로 1원이 깎이지 않게 아주 작은 값을 더하고 버린다
@@ -126,15 +138,17 @@ data class TripBill(
             joins: Map<String, JoinPoint>,
             leaves: Map<String, JoinPoint> = emptyMap(),
             notSharing: Set<String> = emptySet(),
-        ): Map<String, Int> = split(distanceKm, elapsedMs, energy, passengers, joins, leaves, notSharing).passengers
+            tolls: List<TollEvent> = emptyList(),
+        ): Map<String, Int> = split(distanceKm, elapsedMs, energy, passengers, joins, leaves, notSharing, tolls).passengers
 
-        fun of(distanceKm: Float, elapsedMs: Long, energy: EnergyProfile): TripBill {
+        fun of(distanceKm: Float, elapsedMs: Long, energy: EnergyProfile, tollWon: Int = 0): TripBill {
             val km = distanceKm.coerceAtLeast(0f)
             val energyWon = km / energy.kmPerUnit * energy.wonPerUnit
             return TripBill(
                 meter = NyangFare.of(km, elapsedMs),
                 energyWon = energyWon.roundToInt(),
                 energy = energy,
+                tollWon = tollWon.coerceAtLeast(0),
             )
         }
     }
