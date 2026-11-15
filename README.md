@@ -385,6 +385,7 @@ docs/                       기획서, 기획 문서, 회의록, 화면 캡처
 ## 문서
 
 - 기획서: [`docs/application/2026_11_10_app_intro.md`](docs/application/2026_11_10_app_intro.md) — 기획 배경, 기능, 시나리오, 개발 계획, 타깃·예상 MAU·수익 모델·확대 계획
+- 시연 영상: [`docs/application/cat-meter-demo.mp4`](docs/application/cat-meter-demo.mp4) — 한 번의 출근길을 에뮬레이터에서 돌린 3분 14초 영상 (차량 화면, 소리 없음)
 - 기획서 근거 초안: [`docs/application/2026_11_14_app_intro_pain_points_draft.md`](docs/application/2026_11_14_app_intro_pain_points_draft.md) — 근거 글 목록, 구독료 계산, 보험 약관 조사
 - 기획 문서: [`docs/ideas/`](docs/ideas/) — 결제 흐름, 결제 방식 단계, 통행료 나누기
 - 회의록: [`docs/meetings/`](docs/meetings/)
