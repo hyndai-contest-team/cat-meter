@@ -46,7 +46,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** 도착 후: 오늘의 고양이와 이동 기록을 담은 고양 영수증. 저장·공유는 정차 중에만. */
+/** 도착 후: 오늘의 고양이와 이동 기록을 담은 냥수증. 저장·공유는 정차 중에만. */
 @Composable
 fun ReceiptScreen(session: CatMeterSession, state: CatMeterSession.State, car: CarView, wide: Boolean) {
     val record = state.record ?: return
@@ -126,7 +126,7 @@ private fun ReceiptCard(record: TripRecord, layer: GraphicsLayer) {
             .padding(horizontal = 22.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("고양 영수증", color = Palette.paperInk, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("냥수증", color = Palette.paperInk, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text(formatDate(record.startedAtMs), color = Palette.paperSub, fontSize = 14.sp, fontFamily = mono)
         Dashed()
         Cat3D(
@@ -178,7 +178,7 @@ private fun ReceiptCard(record: TripRecord, layer: GraphicsLayer) {
             )
         }
         Dashed()
-        Text("CAT METER · 고양 미터기", color = Palette.paperSub, fontSize = 11.sp, fontFamily = mono)
+        Text("CAT METER · 냥미터기", color = Palette.paperSub, fontSize = 11.sp, fontFamily = mono)
     }
 }
 

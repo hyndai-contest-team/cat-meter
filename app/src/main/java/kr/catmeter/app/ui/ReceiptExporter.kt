@@ -12,7 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** 고양 영수증 이미지를 저장·공유한다. 기기 안에서만 처리하고 서버로 보내지 않는다. */
+/** 냥수증 이미지를 저장·공유한다. 기기 안에서만 처리하고 서버로 보내지 않는다. */
 object ReceiptExporter {
 
     /** 갤러리(Pictures/CatMeter)에 저장. 성공하면 사용자에게 보여 줄 위치를 돌려준다. */
@@ -55,7 +55,7 @@ object ReceiptExporter {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         if (send.resolveActivity(context.packageManager) == null) return false
-        context.startActivity(Intent.createChooser(send, "고양 영수증 공유").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        context.startActivity(Intent.createChooser(send, "냥수증 공유").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         return true
     }
 }
