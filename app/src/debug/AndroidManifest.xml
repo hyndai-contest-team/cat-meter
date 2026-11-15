@@ -3,8 +3,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 테스트 경로 요청(NaviHelper.requestRoute)용. 출시 빌드는 경로를 바꾸지 않아 필요 없다. -->
     <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />
-    <!-- 이 컴퓨터에서 띄운 탑승 등록 서버(http)에 붙기 위한 설정. release 는 https 서버만 쓴다. -->
-    <application android:networkSecurityConfig="@xml/network_security_config">
+    <application>
         <!-- DUMP 권한은 adb shell 만 가진다 → 다른 앱은 보낼 수 없다 -->
         <receiver
             android:name=".DebugRouteReceiver"

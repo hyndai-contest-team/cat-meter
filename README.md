@@ -230,7 +230,7 @@ P단을 넣으면 "도착했나요?"를 묻고, 도착하면 남은 사람의 �
 **에뮬레이터에서 확인한 것 (Pleos Connect 에뮬레이터 v2.1.0)**
 
 - 지원 좌석은 조수석과 2열 좌·중·우입니다. 좌석 점유 변경 알림은 1초 안에 들어옵니다.
-- Virtual Console의 좌석 점유와 SDK 값이 반대로 들어와 debug 빌드에서만 값을 뒤집습니다(`SEAT_OCCUPANCY_INVERTED`). 실차 값 방향은 확인이 필요합니다.
+- Virtual Console의 좌석 점유와 SDK 값이 반대로 들어와 값을 뒤집어 읽습니다(`SEAT_OCCUPANCY_INVERTED`). 제출한 release APK도 에뮬레이터에 맞춰 뒤집습니다. 실차용으로는 `-PseatOccupancyInverted=false`로 만들며, 실차 값 방향은 확인이 필요합니다.
 - 알림을 등록하는 순간 값이 잠깐 흔들려, 좌석 신호가 1.5초 동안 그대로일 때만 판단합니다.
 - Virtual Console에서 안전벨트 착용은 바꿀 수 없어 좌석 점유로 시험했습니다.
 - 문 열림 신호는 1열 오른쪽, 2열 왼쪽, 2열 오른쪽 문에서 들어옵니다. 차가 그 자리 쪽 문 신호를 주지 않으면 좌석 신호만으로 판단합니다.
@@ -251,20 +251,33 @@ P단을 넣으면 "도착했나요?"를 묻고, 도착하면 남은 사람의 �
 
 ## 실행
 
-### 빌드된 APK 내려받기
+### APK 파일
 
-빌드된 APK는 저장소에 넣지 않고 [GitHub Releases](https://github.com/hyndai-contest-team/cat-meter/releases)에 올립니다.
+- 위치: [`apk/tridrive_CatMeter_release.apk`](apk/tridrive_CatMeter_release.apk) (release 빌드, 버전 0.1.2)
+- 설치: `adb install -r apk/tridrive_CatMeter_release.apk`
+- 이 release APK는 공모전 심사 환경인 Pleos Connect 에뮬레이터 v2.1.0에 맞춰 만들었습니다. 에뮬레이터의 좌석 점유 값 방향에 맞춰 값을 뒤집어 읽고, 같은 컴퓨터에서 띄운 탑승 등록 서버(`http://10.0.2.2:8787`)에 접속합니다.
+- 직접 만들려면 `./gradlew :app:assembleRelease`를 실행합니다. 서명 키는 저장소에 넣지 않았으므로 `local.properties`에 `release.storeFile`, `release.storePassword`, `release.keyAlias`, `release.keyPassword`를 적어야 합니다. 서명 없이 확인만 하려면 `./gradlew :app:assembleDebug`로 debug 빌드를 만듭니다.
 
-- [냥미터기 0.1.1-mvp (디버그 빌드)](https://github.com/hyndai-contest-team/cat-meter/releases/tag/v0.1.1-mvp): Pleos Connect 에뮬레이터 v2.1.0 용. 통행료 나누기와 하차·정산 안내 음성이 들어 있습니다
-- 설치: `adb install -r cat-meter-0.1.1-mvp-debug.apk`
-- 디버그 빌드라 좌석 점유 값을 에뮬레이터 방향에 맞춰 뒤집어 읽고, 탑승 서버 주소는 `http://10.0.2.2:8787`입니다. 탑승 QR과 자동결제를 쓰려면 같은 컴퓨터에서 아래 탑승 등록 서버를 켜야 합니다.
-- 새로 만들려면 `./gradlew :app:assembleDebug`를 실행합니다. 결과는 `app/build/outputs/apk/debug/app-debug.apk`에 생깁니다.
+### 테스트 환경
+
+- Pleos Connect 에뮬레이터 **v2.1.0** (AVD `Pleos_Connect_v2.1.0`, system-image `android-34/pleos_car_emulator`)
+- 화면 규격: **2560 × 1440 px, 160 dpi**, 가로 화면. 내비 옆 분할 화면(좁은 창)과 앱 단독 화면(넓은 창)을 모두 지원합니다.
+- 앱: minSdk 28, targetSdk 35, Kotlin + Jetpack Compose
+- 탑승 등록 서버: Node.js 20 이상, 외부 라이브러리 없음 (`server/`)
+- 확인한 컴퓨터: macOS (Apple Silicon), Android Studio 내장 JBR(JDK 17 이상)
+
+### 필요한 설정
+
+1. 에뮬레이터를 **Cold boot**로 켭니다. Quick boot로 켜면 차량 값(VHAL)을 쓸 수 없습니다. 아래 `./scripts/run-emulator.sh`가 이 순서를 대신합니다.
+2. `adb forward tcp:8088 tcp:8088` 후 `http://127.0.0.1:8088/`에서 Virtual Console을 엽니다. 좌석·문·기어·누적 거리를 여기서 넣습니다.
+3. 같은 컴퓨터에서 탑승 등록 서버를 켭니다: `cd server && npm start`. 서버가 없으면 탑승 QR 대신 "탑승 서버에 연결할 수 없어요"가 뜨고, 이름은 직접 넣을 수 있습니다.
+4. 처음 실행할 때 위치 권한과 차속 권한을 묻습니다. 둘 다 허용합니다. 차속 권한을 미리 주려면 `adb shell pm grant kr.catmeter.app android.car.permission.CAR_SPEED`.
+5. 자동 정산은 **평일 출퇴근 시간대(오전 7~9시, 오후 6~8시)**에 내비 즐겨찾기의 집↔회사를 이동할 때만 켜집니다. 그 밖의 시간에는 냥 기록만 남습니다. 다른 시간에 정산까지 보려면 debug 빌드의 시연용 설정을 씁니다 ([에뮬레이터에서 시연하기](#에뮬레이터에서-시연하기)).
 
 ### 개발 환경
 
-- Kotlin + Jetpack Compose, minSdk 28, Pleos Connect 에뮬레이터(system-image `android-34/pleos_car_emulator`)
+- Kotlin + Jetpack Compose, minSdk 28
 - 3D 고양이: 코드로 만든 GLB 모델(`tools/make_cat_glb.py`)을 Filament로 렌더링
-- 탑승 등록 서버: Node.js 20 이상, 외부 라이브러리 없음
 - JDK는 Android Studio 내장 JBR을 씁니다. 터미널에서 빌드하려면 `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`을 지정합니다.
 
 ### 한 번에 실행 (에뮬레이터 + Virtual Console)
@@ -277,7 +290,7 @@ P단을 넣으면 "도착했나요?"를 묻고, 도착하면 남은 사람의 �
 스크립트가 하는 일:
 1. AVD `Pleos_Connect_v2.1.0`을 **Cold boot**(`-no-snapshot-load`)로 켭니다. Quick boot로 켜면 VHAL을 쓸 수 없습니다. 이미 켜진 에뮬레이터가 있으면 그것을 씁니다.
 2. 부팅이 끝날 때까지 기다립니다 (`sys.boot_completed`, 최대 5분).
-3. `--install`을 주면 `./gradlew installDebug`를 실행합니다.
+3. `--install`을 주면 `./gradlew installDebug`로 debug 빌드를 설치합니다. 제출한 release APK는 위 `adb install`로 설치합니다.
 4. `adb forward tcp:8088 tcp:8088`으로 포트를 연결하고, `http://127.0.0.1:8088/`(Virtual Console)을 기본 브라우저로 엽니다.
 
 바꿀 수 있는 값: `AVD_NAME`(에뮬레이터 이름), `ANDROID_HOME`(SDK 경로, 기본 `~/Library/Android/sdk`), `JAVA_HOME`. 에뮬레이터 로그는 `$TMPDIR/catmeter-emulator.log`에 남습니다.
@@ -299,7 +312,7 @@ npm test    # 서버 테스트
 - 환경 변수: `PORT`(기본 8787), `PUBLIC_URL`(휴대폰이 열 주소. 비우면 와이파이 IP로 만듭니다).
 - 탑승 정보는 서버 메모리에만 두고 3시간이 지나면 지웁니다. 서버를 끄면 사라집니다. 받는 개인정보는 탑승자 이름뿐입니다.
 - 결제는 테스트입니다. 실제 결제창은 열리지 않고 카드번호도 받지 않습니다. 서버는 `mock_`으로 시작하는 가짜 빌링키만 저장합니다. 같은 이동은 두 번 결제하지 않습니다.
-- debug 빌드만 `10.0.2.2`·`localhost`로 http 통신을 허용합니다. 실차·release는 https 서버가 필요합니다.
+- 앱은 `10.0.2.2`·`localhost`·`127.0.0.1`로만 http 통신을 허용합니다(에뮬레이터에서 이 컴퓨터의 서버에 붙기 위한 설정). 실차에서는 https 서버가 필요합니다.
 - 서버에 연결하지 못하면 QR 대신 "탑승 서버에 연결할 수 없어요"와 **다시 연결** 버튼을 보여 주고, 이름은 직접 넣을 수 있습니다.
 
 **차량 앱이 쓰는 주소**

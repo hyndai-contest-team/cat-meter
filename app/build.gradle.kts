@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -13,13 +15,31 @@ android {
         applicationId = "kr.catmeter.app"
         minSdk = 28           // Pleos Connect 배포 요구사항: API 28 이상
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.1-mvp"
+        versionCode = 3
+        versionName = "0.1.2"
 
         // 탑승 등록 서버 (server/). 에뮬레이터에서 10.0.2.2 는 이 컴퓨터를 가리킨다.
         // 다른 주소를 쓰려면: ./gradlew installDebug -PboardingServerUrl=https://...
         val boardingServerUrl = (project.findProperty("boardingServerUrl") as String?) ?: "http://10.0.2.2:8787"
         buildConfigField("String", "BOARDING_SERVER_URL", "\"$boardingServerUrl\"")
+    }
+
+    // release 서명: 키 정보는 저장소에 넣지 않고 local.properties 에 둔다
+    // (release.storeFile, release.storePassword, release.keyAlias, release.keyPassword)
+    val localProps = Properties().apply {
+        val f = rootProject.file("local.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    val releaseStoreFile = localProps.getProperty("release.storeFile")
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = localProps.getProperty("release.storePassword")
+                keyAlias = localProps.getProperty("release.keyAlias")
+                keyPassword = localProps.getProperty("release.keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -29,8 +49,11 @@ android {
         }
         release {
             isMinifyEnabled = false
-            // 실차 값 방향은 확인 전. 확인되면 맞춘다.
-            buildConfigField("boolean", "SEAT_OCCUPANCY_INVERTED", "false")
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+            // 공모전 심사는 Pleos Connect 에뮬레이터 v2.1.0 에서 하므로 release 도 에뮬레이터의 좌석 값 방향에 맞춘다.
+            // 실차용으로 만들 때는 -PseatOccupancyInverted=false 를 준다 (실차 값 방향은 확인 전).
+            val inverted = (project.findProperty("seatOccupancyInverted") as String?) ?: "true"
+            buildConfigField("boolean", "SEAT_OCCUPANCY_INVERTED", inverted)
         }
     }
     compileOptions {

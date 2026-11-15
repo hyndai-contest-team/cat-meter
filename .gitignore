@@ -43,6 +43,9 @@ __pycache__/
 # macOS
 .DS_Store
 
-# 빌드된 APK 는 저장소에 넣지 않고 GitHub Releases 에 올린다
-/apk/
+# 빌드된 APK 는 제출용 release APK 만 apk/ 에 넣는다
 *.apk
+!/apk/*_release.apk
+# release 서명 키
+*.jks
+*.keystore

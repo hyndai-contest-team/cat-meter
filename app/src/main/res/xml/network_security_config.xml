@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  debug 빌드 전용. 로컬 탑승 등록 서버(server/)는 http 로 띄우므로, 에뮬레이터가 이 컴퓨터를 가리키는 주소만 평문 통신을 허용한다.
+  로컬 탑승 등록 서버(server/)는 http 로 띄우므로, 에뮬레이터가 이 컴퓨터를 가리키는 주소만 평문 통신을 허용한다.
   그 밖의 주소는 기본값(https 만)을 따른다.
 -->
 <network-security-config>
