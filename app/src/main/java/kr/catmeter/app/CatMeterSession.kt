@@ -637,6 +637,9 @@ class CatMeterSession(context: Context) {
         }
     }
 
+    /** 안내 음성 확인용 (debug 빌드의 DebugRouteReceiver 전용) */
+    fun announceForTest(text: String) = announcer.say(text)
+
     /** 영수증을 닫고 다음 이동을 준비한다 */
     fun backToSetup() {
         closeBoarding()
