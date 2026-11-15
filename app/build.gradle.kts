@@ -13,8 +13,8 @@ android {
         applicationId = "kr.catmeter.app"
         minSdk = 28           // Pleos Connect 배포 요구사항: API 28 이상
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-mvp"
+        versionCode = 2
+        versionName = "0.1.1-mvp"
 
         // 탑승 등록 서버 (server/). 에뮬레이터에서 10.0.2.2 는 이 컴퓨터를 가리킨다.
         // 다른 주소를 쓰려면: ./gradlew installDebug -PboardingServerUrl=https://...
