@@ -9,6 +9,7 @@ import android.content.Intent
  * adb shell am broadcast --user current -a kr.catmeter.app.DEBUG_ROUTE \
  *   -n kr.catmeter.app/.DebugRouteReceiver --ed lat 37.4979 --ed lon 127.0276 --es name 강남역
  * 경로 취소: ... -n kr.catmeter.app/.DebugRouteReceiver --ez cancel true
+ * 안내 음성 확인: ... -n kr.catmeter.app/.DebugRouteReceiver --es say "민수님 하차를 확인했어요."
  * 시연용 출퇴근 판정 켜기/끄기 (자동결제 테스트): ... -n kr.catmeter.app/.DebugRouteReceiver --ez demoCommute true
  */
 class DebugRouteReceiver : BroadcastReceiver() {
@@ -16,6 +17,10 @@ class DebugRouteReceiver : BroadcastReceiver() {
         val session = (context.applicationContext as CatMeterApplication).session
         if (intent.hasExtra("demoCommute")) {
             session.demoCommute = intent.getBooleanExtra("demoCommute", false)
+            return
+        }
+        intent.getStringExtra("say")?.let {
+            session.announceForTest(it)
             return
         }
         val navi = session.navi
